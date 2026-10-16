@@ -156,6 +156,14 @@ static QueueHandle_t s_cmds, s_events;
 static StreamBufferHandle_t s_in, s_out;
 static std::atomic<uint32_t> s_gen{0};
 static std::atomic<bool> s_resting{false};
+/*
+ * Spoken replies' playback, for the log at the end of a turn. While a spoken
+ * message has more speech coming, the voice task finding the reply buffer
+ * empty is an underrun: it plays 20 ms of silence (muse_voice.c).
+ */
+static std::atomic<bool> s_speech_live{false};
+static std::atomic<uint32_t> s_underruns{0};
+static std::atomic<uint32_t> s_min_fill{UINT32_MAX};   /* frames in the reply buffer, at its lowest */
 
 /* ---- Connection ---- */
 
@@ -247,6 +255,9 @@ struct turn_t {
     int tts_msg;             /* message being fetched (or shown, speaker off), or -1 */
     bool silent;             /* speaker off: tts_msg is paced by silence, not fetched */
     bool spoken;             /* tts_msg's speech streams from the TTS server (muse_tts) */
+    bool speech_started;     /* tts_msg's prebuffer is in and it plays */
+    bool any_speech;         /* some message this turn was spoken */
+    int64_t speech_us;       /* when tts_msg's request went out */
     uint8_t *mp3;            /* MP3_BUF */
     size_t mp3_len;
     bool mp3_ended;
@@ -972,6 +983,16 @@ static void turn_finish(void)
         muse_tts_cancel();   /* interrupted, failed or cut off: close the speech stream */
         s_turn.spoken = false;
     }
+    s_speech_live = false;
+    if (s_turn.any_speech) {
+        uint32_t lowest = s_min_fill.load();
+        uint32_t under = s_underruns.exchange(0);
+        ESP_LOGI(TAG, "speech playback: %u underruns (%u ms of silence), buffer at least %u ms", (unsigned)under,
+                 (unsigned)(under * 20), lowest == UINT32_MAX ? 0u : (unsigned)(lowest * 1000 / MIC_RATE));
+        s_turn.any_speech = false;
+    }
+    s_underruns = 0;
+    s_min_fill = UINT32_MAX;
     s_turn.mp3_len = 0;
 }
 
@@ -1546,6 +1567,9 @@ static void start_tts(void)
             s_turn.tts_msg = i;
             s_turn.silent = false;
             s_turn.spoken = true;
+            s_turn.speech_started = false;
+            s_turn.any_speech = true;
+            s_turn.speech_us = now_us();
             mark(M_TTS);
             ESP_LOGI(TAG, "speaking message %s (%u chars)", m.id, (unsigned)m.len);
             show_reply_start(m);
@@ -1613,8 +1637,26 @@ static void pace_silently(void)
  */
 static void pump_speech(void)
 {
-    enum { N = 256 };
+    enum { N = 256, PREBUFFER = MIC_RATE * 2 / 5 };   /* 400 ms */
     msg_t &m = s_turn.msgs[s_turn.tts_msg];
+    if (!s_turn.speech_started) {
+        /*
+         * Wi-Fi delivers in bursts. Starting on the first 64 ms read left no
+         * cushion, and every late burst became 20 ms of silence in the
+         * speech. So hold the speaker back until 400 ms are in (the server
+         * makes speech far faster than it plays, so the cushion only grows),
+         * or the whole message if it's shorter.
+         */
+        size_t have = muse_tts_pending();
+        if (muse_tts_state(nullptr) == MUSE_TTS_RUNNING && have < PREBUFFER) {
+            return;
+        }
+        s_turn.speech_started = true;
+        if (have) {
+            ESP_LOGI(TAG, "speech prebuffered: %u ms after %d ms", (unsigned)(have * 1000 / MIC_RATE),
+                     (int)((now_us() - s_turn.speech_us) / 1000));
+        }
+    }
     while (xStreamBufferSpacesAvailable(s_out) >= N * sizeof(int16_t)) {
         size_t n = muse_tts_read(s_pcm16, N);
         if (!n) {
@@ -1627,7 +1669,9 @@ static void pump_speech(void)
         s_turn.pcm_out += n;
     }
     muse_tts_state_t st = muse_tts_state(nullptr);
-    if (st == MUSE_TTS_RUNNING || muse_tts_pending()) {
+    bool more = st == MUSE_TTS_RUNNING || muse_tts_pending();
+    s_speech_live = more;
+    if (more) {
         return;
     }
     s_turn.spoken = false;
@@ -2262,6 +2306,15 @@ extern "C" bool muse_hatch_turn_caption(size_t played, char *out, size_t cap)
 
 extern "C" size_t muse_hatch_turn_read(int16_t *pcm, size_t frames, int wait_ms)
 {
+    if (s_speech_live.load()) {
+        uint32_t fill = xStreamBufferBytesAvailable(s_out) / sizeof(int16_t);
+        if (fill < s_min_fill.load()) {
+            s_min_fill = fill;
+        }
+        if (!fill) {
+            ++s_underruns;
+        }
+    }
     return xStreamBufferReceive(s_out, pcm, frames * sizeof(int16_t), pdMS_TO_TICKS(wait_ms)) / sizeof(int16_t);
 }
 
