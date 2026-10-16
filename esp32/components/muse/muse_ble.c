@@ -26,6 +26,7 @@
 #include "host/ble_hs.h"
 #include "host/ble_store.h"
 
+#include "muse_audio.h"
 #include "muse_chat.h"
 #include "muse_link.h"
 #include "muse_settings.h"
@@ -161,6 +162,8 @@ static void run_command(char *cmd)
         muse_hatch_test();
     } else if (!strcmp(cmd, "test.loopback")) {
         muse_voice_request_loopback();
+    } else if (!strcmp(cmd, "test.codec")) {
+        muse_audio_dump();
     } else if (!strcmp(cmd, "volume") && parse_int(v, 0, 100, &n)) {
         muse_settings_set_volume(n);
     } else if (!strcmp(cmd, "speaker") && parse_int(v, 0, 1, &n)) {

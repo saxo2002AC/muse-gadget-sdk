@@ -16,7 +16,9 @@
 
 #include "muse_audio.h"
 
+#include <inttypes.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +29,8 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "soc/gpio_reg.h"
+#include "soc/soc.h"
 
 #include "muse_board.h"
 #include "muse_mem.h"
@@ -328,6 +332,41 @@ void muse_audio_loopback_test(int volume)
     free(cap);
     muse_audio_set_mic_gain(muse_settings_mic_gain());
     muse_audio_set_volume(muse_settings_volume());
+}
+
+void muse_audio_dump(void)
+{
+    lock();
+    if (!s_spk || !s_open) {
+        ESP_LOGW(TAG, "codec dump: codecs are closed (resting)");
+        unlock();
+        return;
+    }
+    ESP_LOGI(TAG, "codec dump: open, volume %d, speaker %s", muse_settings_volume(),
+             muse_settings_speaker_on() ? "on" : "off");
+    for (int base = 0; base < 0x50; base += 16) {
+        char line[8 + 16 * 3];
+        int len = snprintf(line, sizeof(line), "%02x:", base);
+        for (int reg = base; reg < base + 16; reg++) {
+            int v = 0;
+            bool ok = esp_codec_dev_read_reg(s_spk, reg, &v) == ESP_CODEC_DEV_OK;
+            if (ok) {
+                len += snprintf(line + len, sizeof(line) - len, " %02x", v & 0xff);
+            } else {
+                len += snprintf(line + len, sizeof(line) - len, " --");
+            }
+        }
+        ESP_LOGI(TAG, "codec reg %s", line);
+    }
+    /* Output latch and output enable, one bit per GPIO: an amp-enable pin's
+     * driven level, which gpio_get_level() can't read on an output-only pin. */
+    ESP_LOGI(TAG, "gpio 0-31: out 0x%08" PRIx32 " enable 0x%08" PRIx32,
+             REG_READ(GPIO_OUT_REG), REG_READ(GPIO_ENABLE_REG));
+#ifdef GPIO_OUT1_REG
+    ESP_LOGI(TAG, "gpio 32+: out 0x%08" PRIx32 " enable 0x%08" PRIx32,
+             REG_READ(GPIO_OUT1_REG), REG_READ(GPIO_ENABLE1_REG));
+#endif
+    unlock();
 }
 
 esp_err_t muse_audio_read(int16_t *mono, size_t frames)
