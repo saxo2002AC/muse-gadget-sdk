@@ -272,7 +272,12 @@ things you can change:
   choice and play the audio it returns. On boards with PSRAM, `start_tts` in
   [`components/muse/muse_chat_session.cpp`](components/muse/muse_chat_session.cpp)
   is the spot: it has the reply text, and the MP3 decoder, speaker and volume
-  are already wired up there.
+  are already wired up there. A server on your own network that streams raw
+  16 kHz PCM works without code: set it on the serial console with
+  `>tts_url=http://host:port` and `>tts_key=...` (empty clears; `>tts` shows
+  them), as described in
+  [`components/muse/muse_tts.h`](components/muse/muse_tts.h). Replies stay text
+  whenever it can't be reached.
 
 A few things worth knowing:
 

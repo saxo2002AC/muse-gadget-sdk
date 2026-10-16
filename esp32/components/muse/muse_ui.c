@@ -740,9 +740,8 @@ static void build_answer(lv_obj_t *face, int ring_in)
         int d = ring_in - spk_r - 4;   /* just inside the ring, even when swollen */
         spk_x = -(int)sqrtf((float)(d * d - spk_y * spk_y));
     } else if (s_mic_icon) {
-        /* A talk button in the same corner (the ES3C40P's BOOT, upper left)
-         * puts its mic icon where the swollen speaker would be: the speaker
-         * goes under it instead. */
+        /* A talk button in the same corner puts its mic icon where the
+         * swollen speaker would be: the speaker goes under it instead. */
         lv_obj_update_layout(face);
         lv_area_t a, f;
         lv_obj_get_coords(s_mic_icon, &a);

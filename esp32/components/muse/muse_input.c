@@ -42,6 +42,7 @@
 #include "muse_menu.h"
 #include "muse_settings.h"
 #include "muse_state.h"
+#include "muse_tts.h"
 #include "muse_ui.h"
 #include "muse_voice.h"
 #include "muse_wifi.h"
@@ -701,6 +702,12 @@ static bool console_command(char *line, bool whole)
     if (whole && s_console_hook && s_console_hook(line)) {
         return true;
     }
+#if CONFIG_MUSE_HATCH
+    /* The TTS server's URL and key: serial only, so BLE can't read or set them. */
+    if (whole && muse_tts_console_command(line)) {
+        return true;
+    }
+#endif
     if (!strcmp(line, "status")) {
         size_t cap = 1024;   /* long SSID, host and VM names escaped: past 512 */
         char *json = heap_caps_malloc(cap, MUSE_BIG_CAPS);
