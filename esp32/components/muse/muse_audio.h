@@ -46,11 +46,6 @@ void muse_audio_selftest(void);
 /* Plays tones while recording, across mic gains; logs levels. For tuning. */
 void muse_audio_loopback_test(int volume);
 
-/* Logs the speaker codec's registers 0x00..0x4f and the chip's GPIO output
- * latch and output-enable registers, which show an amp-enable pin's level.
- * For diagnosing a silent speaker (console ">test.codec"). */
-void muse_audio_dump(void);
-
 /* Blocking read of `frames` mono samples (mic pair mixed down). */
 esp_err_t muse_audio_read(int16_t *mono, size_t frames);
 
