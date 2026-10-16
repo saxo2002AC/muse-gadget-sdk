@@ -30,8 +30,10 @@
  * The pins match the Freenove FNK0104B's, so this is board_fnk0104b.c with
  * the ST7796S panel (espressif/esp_lcd_st7796) in place of the ILI9341.
  * Panel settings follow a LovyanGFX config checked on this board: Panel_ST7796,
- * invert on, rgb_order false (MADCTL BGR bit set), 40 MHz SPI, rotation 0
- * (no mirror or swap), touch reporting x 0..319, y 0..479 in panel pixels.
+ * invert on, rgb_order false (MADCTL BGR bit set), 40 MHz SPI, rotation 0,
+ * touch reporting x 0..319, y 0..479 in the visible frame. Under esp_lcd the
+ * panel also needs MADCTL MX (X mirror), as the FNK0104B does: without it the
+ * first flash showed the image mirrored left to right.
  * There is no vendor BSP in the ESP Component Registry, so like the AIPI
  * Lite board file this drives esp_lcd, the codec and the GPIOs directly.
  */
@@ -203,8 +205,7 @@ static lv_display_t *display_start(lv_indev_t **touch)
         return NULL;
     }
     /* No vendor_config: the driver's default ST7796 init sequence. BGR is
-     * LovyanGFX's rgb_order = false. Rotation 0 needs no mirror or swap: the
-     * FT6336U's frame is the panel's. */
+     * LovyanGFX's rgb_order = false. */
     const esp_lcd_panel_dev_config_t panel_cfg = {
         .reset_gpio_num = LCD_RST,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
@@ -216,6 +217,12 @@ static lv_display_t *display_start(lv_indev_t **touch)
     esp_lcd_panel_reset(s_panel);
     esp_lcd_panel_init(s_panel);
     esp_lcd_panel_invert_color(s_panel, true);   /* IPS panel: LovyanGFX invert = true */
+    /* With MADCTL MX clear the image came out mirrored left to right (seen on
+     * the board), as on the FNK0104B. Mirroring happens in the panel's address
+     * mapping, below LVGL, so LVGL's x stays the visible x and the FT6336U's
+     * raw x, which already matched the visible image under LovyanGFX, needs
+     * no flip. */
+    esp_lcd_panel_mirror(s_panel, true, false);
     esp_lcd_panel_disp_on_off(s_panel, true);
 
     esp_lv_adapter_config_t adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG();
