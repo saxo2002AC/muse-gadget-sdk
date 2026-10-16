@@ -61,6 +61,7 @@ session to Muse. The rest depends on the hardware.
 | **M5Stack StickC Plus2** | ESP32 | 1.14" 135×240 LCD | 8 MB / 2 MB | [M5Stack docs](https://docs.m5stack.com/en/core/M5StickC%20PLUS2), [M5Unified](https://github.com/m5stack/M5Unified) | [M5Stack](https://shop.m5stack.com/products/m5stickc-plus2-esp32-mini-iot-development-kit) (end of life) |
 | **M5Stack Core2 (v1.0)** | ESP32 | 2.0" 320×240 touch LCD | 16 MB / 8 MB | [M5Stack docs](https://docs.m5stack.com/en/core/Core2), [M5Unified](https://github.com/m5stack/M5Unified) | — |
 | **Freenove FNK0104B** | ESP32-S3 | 2.8" 240×320 LCD, touch | 16 MB / 8 MB | [Freenove repo](https://github.com/Freenove/Freenove_ESP32_S3_Display) | — |
+| **LCDWIKI ES3C40P** | ESP32-S3 | 4.0" 320×480 IPS LCD (ST7796S), touch | 16 MB / 8 MB | [Specification](https://www.lcdwiki.com/res/ES3C40P/ES3C40P_Specification_V1.0.pdf), [user manual](https://www.lcdwiki.com/res/ES3C40P/4.0inch_IPS_ESP32-S3_ES3C40P_User_Manual.pdf), [demo instructions](https://www.lcdwiki.com/res/ES3C40P/4.0inch_ES3C40P_arduino_Demo_Instructions.pdf) | — |
 | **VN ESP32-S3 1.83-inch NV3023** | ESP32-S3 | 1.83" 284×240 LCD (NV3023) | 16 MB / 8 MB | [xiaozhi-esp32_vietnam board](https://github.com/TienHuyIoT/xiaozhi-esp32_vietnam) | — |
 
 The experimental [OSTB EchoEar-2ST port](ostb-echoear-2st.md) targets the
@@ -524,6 +525,7 @@ board's overlays, in order:
 | M5Stack StickC Plus2 | `esp32` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-m5stack-stickc-plus2`](sdkconfig.muse-m5stack-stickc-plus2) | by hand |
 | M5Stack Core2 | `esp32` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-m5stack-core2`](sdkconfig.muse-m5stack-core2) | `tools/muse/board.sh build core2` |
 | Freenove FNK0104B | `esp32s3` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-fnk0104b`](sdkconfig.muse-fnk0104b) | `tools/muse/board.sh build fnk0104b` |
+| LCDWIKI ES3C40P | `esp32s3` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-es3c40p`](sdkconfig.muse-es3c40p) | `tools/muse/board.sh build es3c40p` |
 | VN ESP32-S3 1.83-inch NV3023 | `esp32s3` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-vn-s3-183`](sdkconfig.muse-vn-s3-183) | `tools/muse/board.sh build vn183` |
 | FoloToy AI Passport | `esp32c3` | [`devices/sdkconfig.muse`](sdkconfig.muse), [`devices/sdkconfig.muse-ai-passport`](sdkconfig.muse-ai-passport) | `tools/muse/board.sh build ai-passport` |
 

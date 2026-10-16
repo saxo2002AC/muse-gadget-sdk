@@ -75,13 +75,14 @@ BOARDS = {
     "M5Stack CoreS3": "cores3",
     "M5Stack Core2": "core2",
     "Freenove FNK0104B": "fnk0104b",
+    "LCDWIKI ES3C40P": "es3c40p",
     "Guition JC3248W535": "jc3248w535",
     "Waveshare ESP32-S3-Touch-LCD-7": "lcd7",
     "Waveshare ESP32-S3-Touch-LCD-1.28": "lcd128",
     "VN ESP32-S3 1.83-inch NV3023": "vn183",
     "FoloToy AI Passport": "ai-passport",
 }
-CHAT_BOARDS = ("s3", "s3n", "s3-216", "185c", "aipi", "box3", "sticks3", "watcher", "stopwatch", "cores3", "core2", "fnk0104b", "jc3248w535", "lcd7", "lcd128", "vn183", "echoear")
+CHAT_BOARDS = ("s3", "s3n", "s3-216", "185c", "aipi", "box3", "sticks3", "watcher", "stopwatch", "cores3", "core2", "fnk0104b", "es3c40p", "jc3248w535", "lcd7", "lcd128", "vn183", "echoear")
 
 
 class Stop(Exception):

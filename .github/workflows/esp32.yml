@@ -196,6 +196,9 @@ jobs:
           - board: muse-fnk0104b
             target: esp32s3
             overlays: ";devices/sdkconfig.muse;devices/sdkconfig.muse-fnk0104b"
+          - board: muse-es3c40p
+            target: esp32s3
+            overlays: ";devices/sdkconfig.muse;devices/sdkconfig.muse-es3c40p"
           - board: muse-vn-s3-183
             target: esp32s3
             overlays: ";devices/sdkconfig.muse;devices/sdkconfig.muse-vn-s3-183"
