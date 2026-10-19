@@ -70,6 +70,9 @@ typedef enum {
     MUSE_TTS_FAILED,    /* no answer, an error status, or the stream broke */
 } muse_tts_state_t;
 
+/* True while a request is open, or a cancelled one is still closing. */
+bool muse_tts_busy(void);
+
 /* The request's state; *got_audio says whether any speech arrived. */
 muse_tts_state_t muse_tts_state(bool *got_audio);
 

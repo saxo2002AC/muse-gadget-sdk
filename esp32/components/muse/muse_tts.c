@@ -482,7 +482,7 @@ bool muse_tts_begin(const char *text, size_t len, bool cut)
         return false;
     }
     if (atomic_load(&s_busy)) {
-        ESP_LOGW(TAG, "the last request is still closing; this one stays text");
+        ESP_LOGW(TAG, "a request is still open (wait for muse_tts_busy())");
         return false;
     }
     s_text_len = prepare(text, len, cut, s_text);
@@ -499,6 +499,11 @@ bool muse_tts_begin(const char *text, size_t len, bool cut)
     atomic_store(&s_busy, true);
     xTaskNotifyGive(s_task);
     return true;
+}
+
+bool muse_tts_busy(void)
+{
+    return atomic_load(&s_busy);
 }
 
 muse_tts_state_t muse_tts_state(bool *got_audio)

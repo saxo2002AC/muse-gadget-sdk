@@ -135,6 +135,7 @@ static_assert(MP3_BUF > MP3_POLL_ROOM + MP3_HOLD, "reads would stall with the MP
 #define NOTE_PART_BYTES (DICT_CHUNK_BYTES / 4 * 3)   /* staged PCM that base64s to one body chunk */
 
 #define MAX_MSGS 8
+#define SPEAK_QUEUE_MAX 4                  /* messages waiting for the TTS server; older ones beyond go as text */
 
 /* ---- Voice task <-> session task ---- */
 
@@ -217,6 +218,7 @@ struct msg_t {
     char tail[128];          /* its last characters, for the caption */
     bool done;
     tts_t tts;
+    bool speak;              /* queued for the TTS server, not shown as text (queue_speech) */
     uint32_t pcm_start;      /* where its speech starts in the reply audio */
     uint32_t pcm_frames;     /* how long it is; 0 until the MP3 has all arrived */
 };
@@ -1403,6 +1405,50 @@ static void show_reply_start(const msg_t &m)
     }
 }
 
+/* Messages queued to speak that haven't started; *oldest is the first, or -1. */
+static int speak_pending(int *oldest)
+{
+    int n = 0;
+    *oldest = -1;
+    for (int j = 0; j < s_turn.nmsgs; j++) {
+        if (s_turn.msgs[j].speak && s_turn.msgs[j].tts == TTS_QUEUED) {
+            if (*oldest < 0) {
+                *oldest = j;
+            }
+            n++;
+        }
+    }
+    return n;
+}
+
+/*
+ * Queues a finished message to be spoken, in order, after those before it.
+ * The queue holds SPEAK_QUEUE_MAX; past that the oldest waiting message is
+ * shown as text instead. Without a TTS server, or with the speaker off,
+ * nothing is queued and the message is shown as text.
+ */
+static void queue_speech(int i)
+{
+    msg_t &m = s_turn.msgs[i];
+    m.speak = false;
+    if (!s_turn.texts || !muse_tts_configured()) {
+        return;
+    }
+    if (!muse_settings_speaker_on()) {
+        ESP_LOGI(TAG, "tts queue: speaker off, message %s as text", m.id);
+        return;
+    }
+    int oldest;
+    int pending = speak_pending(&oldest);
+    if (pending >= SPEAK_QUEUE_MAX) {
+        s_turn.msgs[oldest].speak = false;
+        ESP_LOGW(TAG, "tts queue full: message %s as text", s_turn.msgs[oldest].id);
+        pending--;
+    }
+    m.speak = true;
+    ESP_LOGI(TAG, "tts queue: message %s queued, %d pending", m.id, pending + 1);
+}
+
 static void message_done(int i, const char *final_text)
 {
     msg_t &m = s_turn.msgs[i];
@@ -1425,10 +1471,11 @@ static void message_done(int i, const char *final_text)
     if (!m.len && final_text && final_text[0]) {
         append_text(m, final_text);
     }
+    ESP_LOGI(TAG, "message %s done (%u chars)", m.id, (unsigned)m.len);
     if (m.len && m.tts == TTS_NONE) {
         m.tts = TTS_QUEUED;
+        queue_speech(i);
     }
-    ESP_LOGI(TAG, "message %s done (%u chars)", m.id, (unsigned)m.len);
 }
 
 static const char *msg_id(cJSON *payload, cJSON *event)
@@ -1560,7 +1607,14 @@ static void start_tts(void)
          */
         const char *text = s_turn.texts ? s_turn.texts + i * TEXT_MAX : nullptr;
         size_t stored = text ? strlen(text) : 0;
-        if (stored && muse_settings_speaker_on() && muse_tts_begin(text, stored, m.len > stored)) {
+        if (m.speak && !muse_settings_speaker_on()) {
+            m.speak = false;
+            ESP_LOGI(TAG, "tts queue: speaker off, message %s as text", m.id);
+        }
+        if (m.speak && muse_tts_busy()) {
+            return;   /* the last request is still closing: this one waits its turn */
+        }
+        if (m.speak && stored && muse_tts_begin(text, stored, m.len > stored)) {
             m.pcm_start = s_turn.pcm_out;
             m.pcm_frames = 0;   /* known once the speech has all arrived */
             m.tts = TTS_ACTIVE;
@@ -1571,9 +1625,15 @@ static void start_tts(void)
             s_turn.any_speech = true;
             s_turn.speech_us = now_us();
             mark(M_TTS);
-            ESP_LOGI(TAG, "speaking message %s (%u chars)", m.id, (unsigned)m.len);
+            int oldest;
+            ESP_LOGI(TAG, "speaking message %s (%u chars); tts queue: %d pending", m.id, (unsigned)m.len,
+                     speak_pending(&oldest));
             show_reply_start(m);
             return;
+        }
+        if (m.speak) {
+            ESP_LOGW(TAG, "tts queue: message %s didn't start, as text", m.id);
+            m.speak = false;
         }
         m.pcm_start = s_turn.pcm_out;
         m.pcm_frames = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);

@@ -63,6 +63,7 @@ static const char *TAG = "muse_ui";
 #define SPEAKER_PX 64
 #define SPEAKER_GROW_PX 8       /* how much the speaker button swells while held */
 #define SPEAKER_HOLD_MS 400     /* LVGL's long press */
+#define TALK_BOTTOM_PX 30       /* the talk button's bottom edge above the screen's: clear of the page dots */
 
 #define COLOR_DIM 0x8b84a8
 #define COLOR_CAPTION 0xd8d2ff
@@ -90,6 +91,8 @@ static bool s_small;
 static bool s_tall;         /* compact, with room above and below Muse (StickS3) */
 static int s_canvas_px;     /* Muse's size on screen */
 static int s_dy;            /* full layout: offset from a 466 px tall screen */
+static int s_talk_px;       /* the on-screen talk button's size, or 0 (muse_board_t.screen_talk_px) */
+static int s_talk_y;        /* its centre, from the screen's */
 static lv_indev_t *s_indev;
 static lv_obj_t *s_tv;
 /* True while the face tile is the visible tile. Updated in the LVGL task;
@@ -136,6 +139,8 @@ static lv_obj_t *s_caption_lbl;
 static lv_obj_t *s_reply_lbl;   /* full layout: the reply's page while answering */
 static lv_obj_t *s_meter[METER_SEGS];
 static lv_obj_t *s_speaker;
+static lv_obj_t *s_talk_btn;    /* push-to-talk on the screen, like the talk key */
+static lv_obj_t *s_talk_icon;
 static lv_obj_t *s_speaker_icon;
 static lv_obj_t *s_aux_icon;
 static lv_obj_t *s_image;   /* display.draw_url, over the face */
@@ -609,6 +614,54 @@ static void build_speaker(lv_obj_t *face, int x, int y)
     show_speaker(muse_settings_speaker_on());
 }
 
+static void on_talk_event(lv_event_t *e)
+{
+    switch (lv_event_get_code(e)) {
+    case LV_EVENT_PRESSED:
+        muse_input_touch_talk(true);
+        break;
+    case LV_EVENT_RELEASED:
+    case LV_EVENT_PRESS_LOST:
+        muse_input_touch_talk(false);   /* as letting go of the talk key: it sends */
+        break;
+    default:
+        break;
+    }
+}
+
+/*
+ * A round push-to-talk button at the bottom, for boards whose talk key is
+ * awkward to reach: held, it is the talk key (muse_input_touch_talk), so it
+ * records, sends and interrupts a reply the same way. Lit while pressed, in
+ * the listening colour while recording (update_status).
+ */
+static void build_talk_button(lv_obj_t *face)
+{
+    s_talk_btn = lv_obj_create(face);
+    lv_obj_remove_style_all(s_talk_btn);
+    lv_obj_set_size(s_talk_btn, s_talk_px, s_talk_px);
+    lv_obj_set_style_radius(s_talk_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(s_talk_btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(s_talk_btn, lv_color_hex(COLOR_METER_OFF), 0);
+    lv_obj_set_style_bg_color(s_talk_btn, lv_color_hex(COLOR_LIT), LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(s_talk_btn, 2, 0);
+    lv_obj_set_style_border_color(s_talk_btn, lv_color_hex(COLOR_DIM), 0);
+    lv_obj_remove_flag(s_talk_btn, LV_OBJ_FLAG_SCROLLABLE);
+    /* A held finger that drifts stays a press, and doesn't swipe to settings. */
+    lv_obj_add_flag(s_talk_btn, LV_OBJ_FLAG_PRESS_LOCK);
+    lv_obj_remove_flag(s_talk_btn, LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER |
+                                       LV_OBJ_FLAG_GESTURE_BUBBLE);
+    static const lv_event_code_t EVENTS[] = { LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST };
+    for (size_t i = 0; i < sizeof(EVENTS) / sizeof(EVENTS[0]); i++) {
+        lv_obj_add_event_cb(s_talk_btn, on_talk_event, EVENTS[i], NULL);
+    }
+    s_talk_icon = make_mic(s_talk_btn, s_talk_px * 4 / 9);
+    lv_obj_center(s_talk_icon);
+    color_mic(s_talk_icon, COLOR_DIM);
+    lv_obj_align(s_talk_btn, LV_ALIGN_CENTER, 0, s_talk_y);
+    lv_obj_add_flag(s_talk_btn, LV_OBJ_FLAG_HIDDEN);   /* until paired, as the mic icon */
+}
+
 static void set_canvas_px(int px)
 {
     if ((int)s_muse_src.header.w == px) {
@@ -688,6 +741,10 @@ static bool fits_across(int w, int y, int ring_in)
 static int reply_bottom(int w, int ring_in)
 {
     int bottom = s_h / 2 - 28;
+    if (s_talk_px) {
+        int top = s_talk_y - s_talk_px / 2 - 6;   /* the talk button stays clear to interrupt */
+        bottom = top < bottom ? top : bottom;
+    }
     if (muse_board->round) {
         int r = ring_in - 6;
         int chord = w / 2 < r ? (int)sqrtf((float)(r * r - w * w / 4)) : 0;
@@ -914,6 +971,12 @@ static void build_screen(void)
     if (muse_board->round) {
         cap_bottom = (int)sqrtf((float)(ring_in * ring_in - CAPTION_W * CAPTION_W / 4)) - 3;
     }
+    if (s_talk_px) {
+        /* The talk button takes the bottom, above the page dots; the rest moves up. */
+        s_talk_y = s_h / 2 - TALK_BOTTOM_PX - s_talk_px / 2;
+        int room = s_talk_y - s_talk_px / 2 - 6;
+        cap_bottom = room < cap_bottom ? room : cap_bottom;
+    }
     int cap_top = cap_bottom - cap_h;
     int meter_y = cap_top - 6 - METER_SEG_PX / 2;
     int art_bottom = meter_y - METER_SEG_PX / 2 - 4;
@@ -1016,6 +1079,9 @@ static void build_screen(void)
     }
 
     build_answer(face, ring_in);
+    if (s_talk_px) {
+        build_talk_button(face);
+    }
 }
 
 
@@ -1402,6 +1468,10 @@ static void update_chrome(float now)
     if (s_mic_icon && !muse_board->rim_controls && s_answer < 0 && (paired && muse_board->audio_init) == lv_obj_has_flag(s_mic_icon, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_set_flag(s_mic_icon, LV_OBJ_FLAG_HIDDEN, !paired || !muse_board->audio_init);
     }
+    /* The talk button too, but replies leave it up: it interrupts them. */
+    if (s_talk_btn && (paired && muse_board->audio_init) == lv_obj_has_flag(s_talk_btn, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_set_flag(s_talk_btn, LV_OBJ_FLAG_HIDDEN, !paired || !muse_board->audio_init);
+    }
 }
 
 /* One area for the whole meter before its segments change: LVGL won't join
@@ -1473,6 +1543,12 @@ static void update_status(muse_mode_t mode, float now)
             lv_obj_set_style_bg_color(s_bar, lv_color_hex(accent), 0);
         }
         set_mic_color(mode == MUSE_MODE_LISTENING ? accent : COLOR_DIM);   /* legacy face icon */
+        if (s_talk_btn) {
+            bool rec = mode == MUSE_MODE_LISTENING;
+            lv_obj_set_style_bg_color(s_talk_btn, lv_color_hex(rec ? accent : COLOR_METER_OFF), 0);
+            lv_obj_set_style_border_color(s_talk_btn, lv_color_hex(rec ? accent : COLOR_DIM), 0);
+            color_mic(s_talk_icon, rec ? COLOR_METER_OFF : COLOR_DIM);
+        }
         s_shown_state = (int)mode;
         s_shown_lit = -1;
     }
@@ -1685,6 +1761,11 @@ esp_err_t muse_ui_start(void)
     if (short_landscape) {
         /* Leave the header's first 40 rows and bottom captions clear. */
         s_canvas_px = s_h * 2 / 3;
+    }
+    s_talk_px = !s_small && muse_board->touch && !muse_board->round && !muse_board->rim_controls
+                    ? muse_board->screen_talk_px : 0;
+    if (s_talk_px) {
+        s_canvas_px -= MUSE_PX_W;   /* a size smaller: the talk button takes the bottom */
     }
     if (muse_board->avatar_px > 0) {
         s_canvas_px = muse_board->avatar_px;

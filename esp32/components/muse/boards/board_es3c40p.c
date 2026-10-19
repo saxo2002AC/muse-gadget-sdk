@@ -45,6 +45,7 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_check.h"
 #include "esp_codec_dev_defaults.h"
+#include "esp_lcd_panel_commands.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
@@ -95,6 +96,7 @@ static const char *TAG = "board";
 static i2c_master_bus_handle_t s_i2c;
 static i2c_master_dev_handle_t s_touch_dev;
 static esp_lcd_panel_handle_t s_panel;
+static esp_lcd_panel_io_handle_t s_io;
 static muse_gpio_button_t s_talk;
 static adc_oneshot_unit_handle_t s_adc;
 
@@ -204,6 +206,7 @@ static lv_display_t *display_start(lv_indev_t **touch)
     if (esp_lcd_new_panel_io_spi(LCD_HOST, &io_cfg, &io) != ESP_OK) {
         return NULL;
     }
+    s_io = io;
     /* No vendor_config: the driver's default ST7796 init sequence. BGR is
      * LovyanGFX's rgb_order = false. */
     const esp_lcd_panel_dev_config_t panel_cfg = {
@@ -275,9 +278,17 @@ static void set_brightness(int pct)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
+/*
+ * The UI has already turned the backlight off (and turns it back on after).
+ * espressif/esp_lcd_st7796 has no disp_sleep ("sleep is not supported by this
+ * panel"), so send the ST7796S's SLPIN/SLPOUT ourselves; GRAM is kept. Its
+ * datasheet wants 5 ms after SLPIN and 120 ms after SLPOUT.
+ */
 static void panel_sleep(bool sleep)
 {
-    esp_lcd_panel_disp_sleep(s_panel, sleep);   /* SLPIN/SLPOUT; GRAM is kept */
+    if (s_io && esp_lcd_panel_io_tx_param(s_io, sleep ? LCD_CMD_SLPIN : LCD_CMD_SLPOUT, NULL, 0) == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(sleep ? 5 : 120));
+    }
 }
 
 /* One ES8311 does both directions over a duplex I2S bus, MCLK from its pin. */
@@ -374,6 +385,7 @@ static const muse_board_t s_board = {
     .diagonal_in = 4.0f,
     .talk_button = "boot",
     .talk_hint = { LV_ALIGN_BOTTOM_LEFT, 8, -8 },   /* BOOT, lower left with the UI upright */
+    .screen_talk_px = 72,   /* BOOT is on the edge: a talk button on the screen too */
     .frame_ms = 40,
     .init = init,
     .display_start = display_start,

@@ -37,6 +37,11 @@ class ChatSession(unittest.TestCase):
 #include "minimp3.h"
 #include "muse_chat_priv.h"
 #define ESP_LOGI(...) ((void)0)
+#define ESP_LOGW(tag, ...) ((void)(tag))
+static const char *TAG = "test";
+static bool tts_set = false, speaker_on = true;
+static bool muse_tts_configured() { return tts_set; }
+static bool muse_settings_speaker_on() { return speaker_on; }
 ''' + constants + types + r'''
 static turn_t s_turn;
 static char s_reply_shown[EV_TEXT];
@@ -128,12 +133,39 @@ static void bounded_rejections() {
     event("message.assistant", "second", "note", "Second");
     assert(s_turn.nmsgs == 2 && s_turn.msgs[0].done && s_turn.msgs[1].done);
 }
+static int speaking() {
+    int n = 0;
+    for (int i = 0; i < s_turn.nmsgs; i++) n += s_turn.msgs[i].speak;
+    return n;
+}
+static void speech_queue() {
+    char texts[MAX_MSGS * TEXT_MAX] = {};
+    s_turn.texts = texts;
+    tts_set = false;   /* no TTS server: every message is text */
+    begin();
+    event("message.assistant", "a", "note", "First");
+    assert(s_turn.nmsgs == 1 && s_turn.msgs[0].tts == TTS_QUEUED && !speaking());
+    tts_set = true;   /* in order, up to SPEAK_QUEUE_MAX; past that the oldest waiting goes as text */
+    begin();
+    const char *ids[] = { "m0", "m1", "m2", "m3", "m4" };
+    for (const char *id : ids) event("message.assistant", id, "note", "Some text.");
+    assert(s_turn.nmsgs == 5 && speaking() == SPEAK_QUEUE_MAX);
+    assert(!s_turn.msgs[0].speak && s_turn.msgs[1].speak && s_turn.msgs[4].speak);
+    for (int i = 0; i < 5; i++) assert(s_turn.msgs[i].tts == TTS_QUEUED);
+    speaker_on = false;   /* speaker off: nothing queued to speak */
+    begin();
+    event("message.assistant", "q", "note", "Quiet");
+    assert(s_turn.nmsgs == 1 && !speaking());
+    speaker_on = true;
+    tts_set = false;
+}
 int main(int argc, char **argv) {
     assert(argc == 2);
     switch (atoi(argv[1])) {
     case 0: rejected_deltas(); break;
     case 1: valid_parents(); break;
     case 2: bounded_rejections(); break;
+    case 3: speech_queue(); break;
     default: return 2;
     }
 }
@@ -166,3 +198,6 @@ int main(int argc, char **argv) {
 
     def test_rejection_capacity_preserves_correlation(self):
         self.run_case(2)
+
+    def test_finished_messages_queue_for_speech_in_order_and_bounded(self):
+        self.run_case(3)
