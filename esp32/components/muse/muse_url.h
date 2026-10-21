@@ -41,6 +41,11 @@ typedef struct {
  * user, spaces or control characters. */
 bool muse_url_parse(const char *url, muse_url_t *out);
 
+/* A DNS name the >dns= console command may look up and print back: labels of
+ * letters, digits and inner hyphens, 1 to 63 long, dot-separated, at most 253
+ * in all. */
+bool muse_dns_name_ok(const char *name);
+
 #ifdef __cplusplus
 }
 #endif

@@ -47,6 +47,7 @@
 #endif
 #include "muse_settings.h"
 #include "muse_state.h"
+#include "muse_resolve.h"
 #include "muse_tts.h"
 #include "muse_ui.h"
 #include "muse_voice.h"
@@ -710,6 +711,9 @@ static bool console_command(char *line, bool whole)
 #if CONFIG_MUSE_HATCH
     /* The TTS server's URL and key: serial only, so BLE can't read or set them. */
     if (whole && muse_tts_console_command(line)) {
+        return true;
+    }
+    if (whole && muse_resolve_console_command(line)) {   /* >dns=NAME, a resolver check */
         return true;
     }
 #endif

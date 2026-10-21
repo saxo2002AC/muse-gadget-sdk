@@ -118,3 +118,29 @@ bool muse_url_parse(const char *url, muse_url_t *out)
     out->mdns = mdns;
     return true;
 }
+
+bool muse_dns_name_ok(const char *name)
+{
+    size_t n = strlen(name), label = 0;
+    if (!n || n > 253) {
+        return false;
+    }
+    for (size_t i = 0; i <= n; i++) {
+        char c = name[i];
+        if (c == '.' || c == '\0') {
+            if (!label || label > 63 || name[i - 1] == '-') {
+                return false;
+            }
+            label = 0;
+            continue;
+        }
+        if (!is_alnum(c) && c != '-') {
+            return false;
+        }
+        if (c == '-' && !label) {
+            return false;   /* a label can't start with a hyphen */
+        }
+        label++;
+    }
+    return true;
+}

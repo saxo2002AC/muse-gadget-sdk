@@ -36,9 +36,13 @@ extern "C" {
  * for the mDNS query the first time; call it from a worker task. */
 bool muse_resolve(const muse_url_t *url, char ip[16]);
 
-/* Drops the cached address of a .local host, and lwIP's, so the next
- * muse_resolve() asks again. */
+/* Drops our cached address of a .local host, so the next muse_resolve()
+ * asks again. lwIP's own cache is left alone (see muse_resolve.c). */
 void muse_resolve_forget(const muse_url_t *url);
+
+/* The serial console's >dns=NAME: prints @dns {name, ip | error, ms,
+ * servers, forgets}. False for any other line. */
+bool muse_resolve_console_command(const char *line);
 
 #ifdef __cplusplus
 }

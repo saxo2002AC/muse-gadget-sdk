@@ -29,8 +29,40 @@ static void bad(const char *url)
     }
 }
 
+/* muse_dns_name_ok: what >dns= may look up (and so print back). */
+static void dns_names(void)
+{
+    assert(muse_dns_name_ok("hatch.metaaivm.com"));
+    assert(muse_dns_name_ok("Mac-mini-de-acserver.local"));
+    assert(muse_dns_name_ok("a"));
+    assert(muse_dns_name_ok("x1.y-2.z"));
+    assert(!muse_dns_name_ok(""));
+    assert(!muse_dns_name_ok("bad name.com"));
+    assert(!muse_dns_name_ok("evil\n.com"));
+    assert(!muse_dns_name_ok("a\"b.com"));
+    assert(!muse_dns_name_ok("-lead.com"));
+    assert(!muse_dns_name_ok("trail-.com"));
+    assert(!muse_dns_name_ok("double..dot"));
+    assert(!muse_dns_name_ok(".lead"));
+    assert(!muse_dns_name_ok("http://x.com"));
+    char longlabel[70];
+    memset(longlabel, 'a', 64);
+    longlabel[64] = '\0';
+    assert(!muse_dns_name_ok(longlabel));   /* a label is at most 63 */
+    char longname[300];
+    for (int i = 0; i < 254; i++) {
+        longname[i] = i % 2 ? '.' : 'a';
+    }
+    longname[253] = 'a';
+    longname[254] = '\0';
+    assert(!muse_dns_name_ok(longname));    /* a name is at most 253 */
+    longname[253] = '\0';
+    assert(muse_dns_name_ok(longname));
+}
+
 int main(void)
 {
+    dns_names();
     ok("http://192.168.0.11:3024", "192.168.0.11", 3024, false);
     ok("http://0.0.0.0:1", "0.0.0.0", 1, false);
     ok("http://255.255.255.255:65535", "255.255.255.255", 65535, false);

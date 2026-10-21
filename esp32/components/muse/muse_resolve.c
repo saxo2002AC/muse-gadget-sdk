@@ -16,14 +16,16 @@
 
 #include "muse_resolve.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_netif.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "lwip/dns.h"
 #include "lwip/netdb.h"
-#include "lwip/tcpip.h"
+#include "lwip/inet.h"
 
 static const char *TAG = "muse_resolve";
 
@@ -98,11 +100,7 @@ bool muse_resolve(const muse_url_t *url, char ip[16])
     return true;
 }
 
-static void clear_lwip_cache(void *arg)
-{
-    (void)arg;
-    dns_clear_cache();   /* lwIP's own, on its thread */
-}
+static int s_forgets;   /* since boot, for >dns */
 
 void muse_resolve_forget(const muse_url_t *url)
 {
@@ -115,7 +113,66 @@ void muse_resolve_forget(const muse_url_t *url)
             s_cache[i].host[0] = '\0';
         }
     }
+    s_forgets++;
     taskEXIT_CRITICAL(&s_mux);
-    tcpip_callback(clear_lwip_cache, NULL);
+    /* Only ours. lwIP's dns_clear_cache() used to be called here too, but it
+     * completes every lookup in flight with no address (dns_call_found(i,
+     * NULL)), so another task's getaddrinfo() for an unrelated name, Muse's
+     * own server included, failed with EAI_FAIL. lwIP keeps an mDNS answer
+     * only for its TTL anyway. */
     ESP_LOGI(TAG, "%s: asking again next time", url->host);
+}
+
+/* >dns=NAME: looks NAME up as esp-tls does (any family) and prints the
+ * answer, how long it took, the DNS servers in use and how often a server
+ * address was forgotten. A diagnostic for the serial console. */
+bool muse_resolve_console_command(const char *line)
+{
+    if (strncmp(line, "dns=", 4) != 0) {
+        return false;
+    }
+    const char *name = line + 4;
+    if (!muse_dns_name_ok(name)) {
+        printf("@error dns: not a host name\n");
+        fflush(stdout);
+        return true;
+    }
+    char servers[3][INET6_ADDRSTRLEN] = { "", "", "" };
+    esp_netif_t *netif = esp_netif_get_default_netif();
+    static const esp_netif_dns_type_t TYPES[3] = { ESP_NETIF_DNS_MAIN, ESP_NETIF_DNS_BACKUP, ESP_NETIF_DNS_FALLBACK };
+    for (int i = 0; i < 3 && netif; i++) {
+        esp_netif_dns_info_t info;
+        if (esp_netif_get_dns_info(netif, TYPES[i], &info) == ESP_OK) {
+            if (info.ip.type == ESP_IPADDR_TYPE_V4) {
+                esp_ip4addr_ntoa(&info.ip.u_addr.ip4, servers[i], sizeof(servers[i]));
+            }
+        }
+    }
+    const struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
+    struct addrinfo *res = NULL;
+    int64_t t0 = esp_timer_get_time();
+    int err = getaddrinfo(name, NULL, &hints, &res);
+    int ms = (int)((esp_timer_get_time() - t0) / 1000);
+    char ip[INET6_ADDRSTRLEN] = "";
+    if (!err && res) {
+        if (res->ai_family == AF_INET) {
+            inet_ntop(AF_INET, &((const struct sockaddr_in *)res->ai_addr)->sin_addr, ip, sizeof(ip));
+        } else {
+            inet_ntop(AF_INET6, &((const struct sockaddr_in6 *)res->ai_addr)->sin6_addr, ip, sizeof(ip));
+        }
+    }
+    if (res) {
+        freeaddrinfo(res);
+    }
+    taskENTER_CRITICAL(&s_mux);
+    int forgets = s_forgets;
+    taskEXIT_CRITICAL(&s_mux);
+    if (ip[0]) {
+        printf("@dns {\"name\":\"%s\",\"ip\":\"%s\",\"ms\":%d", name, ip, ms);
+    } else {
+        printf("@dns {\"name\":\"%s\",\"error\":%d,\"ms\":%d", name, err ? err : -1, ms);
+    }
+    printf(",\"servers\":[\"%s\",\"%s\",\"%s\"],\"forgets\":%d}\n", servers[0], servers[1], servers[2], forgets);
+    fflush(stdout);
+    return true;
 }
