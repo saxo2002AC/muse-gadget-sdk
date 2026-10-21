@@ -24,6 +24,8 @@ int main(void) {
     assert(muse_secret_console_only("sdk_token=mgst_abc"));
     assert(muse_secret_console_only("sdk_tokenmgst"));
     assert(muse_secret_console_only("grd_key=abc"));
+    assert(muse_secret_console_only("lcd_orient=1"));   /* board console commands (R14) */
+    assert(muse_secret_console_only("lcd_madctl"));
     assert(!muse_secret_console_only("tts"));          /* the status command, no value */
     assert(!muse_secret_console_only("status"));
     assert(!muse_secret_console_only("hatch.token=abc"));

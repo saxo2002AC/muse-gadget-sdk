@@ -26,13 +26,14 @@ extern "C" {
  * Commands that carry secrets.
  *
  * The TTS key, the SDK token and the Guardián key are set on the serial
- * console only, by their own handlers. A line in those families that no
- * handler took (a typo, no '=', too long to read whole) must not reach the
- * setup commands (muse_ble_command), which log what they're given.
+ * console only, by their own handlers, as are the board's panel commands
+ * (lcd_*). A line in those families that no handler took (a typo, no '=',
+ * too long to read whole) must not reach the setup commands
+ * (muse_ble_command), which log what they're given.
  */
 
 /* True if `line` (a console line without its '>') is in a console-only
- * secret family: tts_*, sdk_token*, grd_*. "tts" alone is the status. */
+ * family: tts_*, sdk_token*, grd_*, lcd_*. "tts" alone is the status. */
 bool muse_secret_console_only(const char *line);
 
 /* True if the setup or console command named `cmd` (without its '=value')

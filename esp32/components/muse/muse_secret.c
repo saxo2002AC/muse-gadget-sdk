@@ -25,7 +25,7 @@ static bool starts(const char *s, const char *prefix)
 
 bool muse_secret_console_only(const char *line)
 {
-    return starts(line, "tts_") || starts(line, "sdk_token") || starts(line, "grd_");
+    return starts(line, "tts_") || starts(line, "sdk_token") || starts(line, "grd_") || starts(line, "lcd_");
 }
 
 bool muse_secret_value(const char *cmd)
