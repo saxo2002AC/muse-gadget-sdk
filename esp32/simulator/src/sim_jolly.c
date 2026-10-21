@@ -18,22 +18,40 @@
  * MUSE_SIM_JOLLY_LINK=down: no link. MUSE_SIM_JOLLY_DATA=ok|crit: data as in
  * tests/jolly/contract/glance.{ok,crit}.json (and apps, events, series), for
  * screenshots of the status pages; unset, no glance has arrived. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "jolly/jolly_client.h"
 
+static char s_kind[8];   /* a scenario's jolly=...: wins over the environment */
+
+/* ok, crit, spy (a security warning), quiet (quiet hours), down (no link), none. */
+void sim_jolly_set(const char *kind)
+{
+    snprintf(s_kind, sizeof(s_kind), "%s", kind);
+}
+
+static const char *kind_now(void)
+{
+    if (s_kind[0]) {
+        return s_kind;
+    }
+    const char *d = getenv("MUSE_SIM_JOLLY_DATA");
+    return d ? d : "";
+}
+
 static const char *data_kind(void)
 {
-    const char *d = getenv("MUSE_SIM_JOLLY_DATA");
-    return d && (!strcmp(d, "ok") || !strcmp(d, "crit")) ? d : NULL;
+    const char *d = kind_now();
+    return !strcmp(d, "ok") || !strcmp(d, "crit") || !strcmp(d, "spy") || !strcmp(d, "quiet") ? d : NULL;
 }
 
 bool jolly_client_snapshot(jolly_glance_t *g, jolly_linkstate_t *link)
 {
     const char *which = getenv("MUSE_SIM_JOLLY_LINK");
     memset(link, 0, sizeof(*link));
-    link->link = which && !strcmp(which, "down") ? JL_UNREACHABLE : JL_OK;
+    link->link = (which && !strcmp(which, "down")) || !strcmp(kind_now(), "down") ? JL_UNREACHABLE : JL_OK;
     link->have_ok = true;
     const char *d = data_kind();
     if (!d || !g) {
@@ -81,7 +99,8 @@ bool jolly_client_snapshot(jolly_glance_t *g, jolly_linkstate_t *link)
     g->net.speed_down = 312;
     g->net.speed_up = 41;
     g->net.speed_age_s = 2400;
-    g->sec.level = crit ? JLV_WARN : JLV_OK;
+    g->sec.level = crit || !strcmp(d, "spy") ? JLV_WARN : JLV_OK;
+    g->quiet = !strcmp(d, "quiet");
     g->sec.ports = 15;
     g->sec.ports_unreg = 3;
     g->sec.plists = 71;

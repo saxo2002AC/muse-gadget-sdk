@@ -33,6 +33,10 @@
 
 #include "muse_state.h"
 #include "muse_ui.h"
+#if CONFIG_MUSE_JOLLY
+#include "jolly/jolly_eyes.h"
+void sim_jolly_set(const char *kind);   /* sim_jolly.c */
+#endif
 #include "sim_board.h"
 #include "sim_platform.h"
 #include "sim_services.h"
@@ -69,6 +73,7 @@ static void usage(FILE *out, const char *argv0)
             "  paired=true|false  link=boot|unpaired|pairing|confirm|connecting|online|offline|error\n"
             "  speaker=true|false brightness=10..100 advance=MILLISECONDS\n"
             "  tile=N             the tileview's column N (0 the face)\n"
+            "  jolly=ok|crit|spy|quiet|down|none   pet=1   (built with MUSE_SIM_JOLLY)\n"
             "\n"
             "Interactive keys: F1..F7 select face states, H is happy, Space is\n"
             "push-to-talk, +/- change level, [/] change progress, S sleeps,\n"
@@ -298,6 +303,16 @@ static bool apply_setting(const char *key, const char *value, bool real_time)
     if (!strcmp(key, "face")) {
         return set_face(value);
     }
+#if CONFIG_MUSE_JOLLY
+    if (!strcmp(key, "jolly")) {   /* the stub Guardián's data: ok, crit, spy, quiet, down, none */
+        sim_jolly_set(value);
+        return true;
+    }
+    if (!strcmp(key, "pet")) {     /* a pat on Jolly's eyes */
+        jolly_eyes_tap();
+        return true;
+    }
+#endif
     if (!strcmp(key, "tile") && parse_long(value, 0, 9, &number)) {
         muse_ui_show_tile((int)number);
         return true;

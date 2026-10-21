@@ -15,6 +15,7 @@
  */
 
 #include "jolly/jolly_eyes.h"
+#include "jolly/jolly_mouth.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -25,7 +26,9 @@
 #define EYE_H 120
 #define EYE_GAP 60                 /* between the eyes */
 #define BOX_W 360                  /* room for the gaze and the hearts */
-#define BOX_H 220
+#define BOX_H 264                  /* ... and the mouth */
+#define EYES_DY (-26)              /* the eyes' centre, above the box's: room for the mouth */
+#define MOUTH_DY 80                /* the mouth's centre, below it */
 #define HEARTS 6
 #define HEART_W 20
 #define HEART_H 18
@@ -77,6 +80,14 @@ static lv_obj_t *s_box;
 static eye_t s_eye[2];
 static heart_t s_hearts[HEARTS];
 static lv_obj_t *s_zzz;
+static lv_obj_t *s_arc;            /* the smile */
+static lv_obj_t *s_mouth;          /* line, ring or talking mouth */
+static lv_obj_t *s_bubble;         /* durmiendo's snore bubble */
+static struct {
+    int kind, w, h, x, y, thick, bubble;   /* last set: only changes redraw */
+    uint32_t color;
+} s_m = { .kind = -1 };
+static float s_level;              /* the reply's level, 0..1, for the talking mouth */
 static void (*s_on_pet)(void);
 
 static jolly_mood_t s_mood = JM_TRANQUILO, s_pending = JM_TRANQUILO;
@@ -172,6 +183,20 @@ void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void))
         lv_obj_set_style_bg_color(e->bottom, lv_color_black(), 0);
         lv_obj_set_style_bg_color(e->smile, lv_color_black(), 0);
     }
+    s_arc = lv_arc_create(s_box);
+    lv_obj_remove_style(s_arc, NULL, LV_PART_KNOB);
+    lv_obj_remove_flag(s_arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_opa(s_arc, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(s_arc, true, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_all(s_arc, 0, 0);
+    lv_arc_set_bg_angles(s_arc, 0, 360);
+    lv_arc_set_angles(s_arc, 35, 145);   /* the bottom of the circle: a smile */
+    s_mouth = plain(s_box);
+    s_bubble = plain(s_box);
+    lv_obj_set_style_bg_opa(s_bubble, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_radius(s_bubble, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(s_bubble, 2, 0);
+    lv_obj_add_flag(s_bubble, LV_OBJ_FLAG_HIDDEN);
     for (int i = 0; i < HEARTS; i++) {
         lv_obj_t *h = lv_image_create(s_box);
         lv_image_set_src(h, &s_heart_dsc);
@@ -226,6 +251,14 @@ void jolly_eyes_pet(int32_t x, int32_t y)
             lv_obj_remove_flag(s_hearts[i].img, LV_OBJ_FLAG_HIDDEN);
             return;
         }
+    }
+}
+
+void jolly_eyes_tap(void)
+{
+    jolly_eyes_pet(BOX_W / 2, BOX_H / 2 + EYES_DY);
+    if (s_on_pet) {
+        s_on_pet();
     }
 }
 
@@ -285,7 +318,7 @@ static void schedule(void)
         s_next_blink = s_now + rnd(2200, 5600);
     }
     if (s_mood == JM_CARINO && s_now >= s_next_heart) {
-        jolly_eyes_pet(rnd(BOX_W / 2 - 110, BOX_W / 2 + 110), BOX_H / 2 - EYE_H / 2);
+        jolly_eyes_pet(rnd(BOX_W / 2 - 110, BOX_W / 2 + 110), BOX_H / 2 + EYES_DY - EYE_H / 2);
         s_next_heart = s_now + HEART_EVERY_MS;
     }
 }
@@ -309,7 +342,7 @@ static void place_eye(eye_t *e, int side, float closure, float gx, float gy, lv_
     int32_t w = (int32_t)(EYE_W * m->w * (1.0f + 0.12f * closure));
     int32_t h = (int32_t)(EYE_H * m->h * pulse * (1.0f - 0.9f * closure));
     h = h < 4 ? 4 : h;
-    int32_t x = (side ? 1 : -1) * (EYE_GAP / 2 + EYE_W / 2) + (int32_t)gx, y = (int32_t)gy;
+    int32_t x = (side ? 1 : -1) * (EYE_GAP / 2 + EYE_W / 2) + (int32_t)gx, y = EYES_DY + (int32_t)gy;
     int32_t top = (int32_t)(s_top * h), bottom = (int32_t)(s_bottom * h);
     /* Smile: a big circle rising into the eye from below, leaving an arch. */
     int32_t smile_y = s_smile < 0.02f ? -1 : h - (int32_t)(s_smile * h * 0.55f);
@@ -346,6 +379,59 @@ static void place_eye(eye_t *e, int side, float closure, float gx, float gy, lv_
     e->color = rgb;
 }
 
+/* The mouth for the mood showing, in the eyes' colour, following their gaze a little. */
+static void place_mouth(lv_color_t color, float gx, float gy)
+{
+    jolly_mouth_t m = jolly_mouth_for(s_mood);
+    int32_t x = m.dx + (int32_t)(gx * 0.4f), y = MOUTH_DY + (int32_t)(gy * 0.4f);
+    if (m.jitter) {
+        x += rnd(-2, 2);
+        y += rnd(-2, 2);
+    }
+    int32_t h = m.kind == JMOUTH_TALK ? jolly_mouth_talk_h(s_level, s_now)
+              : m.kind == JMOUTH_O    ? m.w
+                                      : m.thick;
+    int bubble = m.bubble ? 6 + (int)((s_now / 120) % 10) : 0;   /* a snore bubble swelling */
+    uint32_t rgb = lv_color_to_u32(color);
+    if ((int)m.kind == s_m.kind && m.w == s_m.w && h == s_m.h && x == s_m.x && y == s_m.y && m.thick == s_m.thick &&
+        bubble == s_m.bubble && rgb == s_m.color) {
+        return;   /* still: nothing to redraw */
+    }
+    bool smile = m.kind == JMOUTH_SMILE;
+    lv_obj_set_flag(s_arc, LV_OBJ_FLAG_HIDDEN, !smile);
+    lv_obj_set_flag(s_mouth, LV_OBJ_FLAG_HIDDEN, smile);
+    if (smile) {
+        /* The arc's circle sits above the mouth line, so its bottom is the smile. */
+        lv_obj_set_size(s_arc, m.w, m.w);
+        lv_obj_set_style_arc_width(s_arc, m.thick, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(s_arc, color, LV_PART_INDICATOR);
+        lv_obj_align(s_arc, LV_ALIGN_CENTER, x, y - m.w / 2 + m.thick);
+    } else {
+        lv_obj_set_size(s_mouth, m.w, h);
+        lv_obj_set_style_radius(s_mouth, m.kind == JMOUTH_O ? LV_RADIUS_CIRCLE : (h < m.w ? h / 2 : m.w / 2), 0);
+        bool ring = m.kind == JMOUTH_O;
+        lv_obj_set_style_bg_opa(s_mouth, ring ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(s_mouth, color, 0);
+        lv_obj_set_style_border_width(s_mouth, ring ? m.thick : 0, 0);
+        lv_obj_set_style_border_color(s_mouth, color, 0);
+        lv_obj_align(s_mouth, LV_ALIGN_CENTER, x, y);
+    }
+    lv_obj_set_flag(s_bubble, LV_OBJ_FLAG_HIDDEN, !bubble);
+    if (bubble) {
+        lv_obj_set_size(s_bubble, bubble, bubble);
+        lv_obj_set_style_border_color(s_bubble, color, 0);
+        lv_obj_align(s_bubble, LV_ALIGN_CENTER, x + m.w / 2 + 6 + bubble / 2, y - 4 - bubble / 2);
+    }
+    s_m.kind = m.kind;
+    s_m.w = m.w;
+    s_m.h = h;
+    s_m.x = x;
+    s_m.y = y;
+    s_m.thick = m.thick;
+    s_m.bubble = bubble;
+    s_m.color = rgb;
+}
+
 static void place_hearts(void)
 {
     for (int i = 0; i < HEARTS; i++) {
@@ -364,12 +450,13 @@ static void place_hearts(void)
     }
 }
 
-void jolly_eyes_tick(int64_t now_ms)
+void jolly_eyes_tick(int64_t now_ms, float level)
 {
     if (!s_box) {
         return;
     }
     s_now = now_ms;
+    s_level = level;
     if (!s_next_blink) {
         s_next_blink = now_ms + rnd(1500, 4000);
     }
@@ -394,6 +481,7 @@ void jolly_eyes_tick(int64_t now_ms)
     for (int i = 0; i < 2; i++) {
         place_eye(&s_eye[i], i, closure, gx, gy, color);
     }
+    place_mouth(color, gx, gy);
     if (s_mood == JM_DURMIENDO) {
         int32_t rise = (int32_t)((now_ms / 40) % 40);
         lv_obj_align(s_zzz, LV_ALIGN_TOP_RIGHT, -20, 30 - rise);

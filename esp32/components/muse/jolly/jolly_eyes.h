@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 /*
- * Jolly's eyes: two rounded rectangles (style B, "robot") with lids, in the
+ * Jolly's eyes and mouth: two rounded rectangles (style B, "robot") with lids, in the
  * mood's colour, that wander (saccades), blink (single, double or slow, with
  * squash and stretch) and take a new mood behind a blink. Cariño sways and
  * sends hearts up; a pat adds one where it landed. Everything is computed
@@ -42,11 +42,15 @@ void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void));
  * don't blink. */
 void jolly_eyes_set_mood(jolly_mood_t m);
 
+/* A pat in the middle of the eyes, as a tap there (benches, the simulator). */
+void jolly_eyes_tap(void);
+
 /* A heart at (x, y), in the eyes' own coordinates. */
 void jolly_eyes_pet(int32_t x, int32_t y);
 
-/* Advances everything to now_ms (the board's monotonic clock), once a frame. */
-void jolly_eyes_tick(int64_t now_ms);
+/* Advances everything to now_ms (the board's monotonic clock), once a frame.
+ * `level` is the reply's loudness (0..1) for the talking mouth. */
+void jolly_eyes_tick(int64_t now_ms, float level);
 
 /* The mood's colour, 0xRRGGBB (the guardian plan's table). */
 uint32_t jolly_mood_color(jolly_mood_t m);

@@ -546,7 +546,7 @@ static void on_jolly_pet(void)
 
 /* Jolly in the avatar's place: the mood from Muse's voice, a pat and the Mac
  * Mini's Guardián (jolly_client), then a frame of the eyes. */
-static void jolly_tick(muse_mode_t mode)
+static void jolly_tick(muse_mode_t mode, float voice_level)
 {
     int64_t now = esp_timer_get_time() / 1000;
     jolly_linkstate_t link;
@@ -563,7 +563,7 @@ static void jolly_tick(muse_mode_t mode)
         .feliz_until_ms = s_feliz_until_ms,
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
-    jolly_eyes_tick(now);
+    jolly_eyes_tick(now, voice_level);   /* the reply's level moves the talking mouth */
 }
 #endif
 
@@ -1815,7 +1815,7 @@ static void frame_tick(lv_timer_t *timer)
 
 #if CONFIG_MUSE_JOLLY
     (void)mode_t;
-    jolly_tick(mode);
+    jolly_tick(mode, s_level);
 #else
     muse_pose_t pose = {
         .mode = mode,

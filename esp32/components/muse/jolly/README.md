@@ -15,7 +15,8 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 |---|---|---|
 | `../boards/es3c40p_orient.c` | landscape MADCTL and touch remap | `tests/jolly/test_orient.c` |
 | `jolly_mood.c` | the mood, first match wins (plan §1.9) | `tests/jolly/test_mood.c` |
-| `jolly_eyes.c` | the eyes: saccades, blinks, lids, hearts | simulator |
+| `jolly_eyes.c` | the eyes and mouth: saccades, blinks, lids, hearts | simulator |
+| `jolly_mouth.c` | the mouth for each mood, and the talking opening | `tests/jolly/test_mouth.c` |
 | `jolly_glance.c` | strict contract parsers, ETag check, link state (§1.8) | `tests/jolly/test_glance.c` |
 | `jolly_client.c` | the poll task, NVS config, console | device, `tools/jolly/fake_guardian.py` |
 | `jolly_text.c` | the pages' Spanish strings | `tests/jolly/test_text.c` |
@@ -65,9 +66,28 @@ MUSE_SIM_BOARD=es3c40p MUSE_SIM_JOLLY_DATA=crit <build>/muse_simulator --headles
     --scenario <file with tile=1> --screenshot out.ppm
 ```
 
+Scenario keys: `face=` drives the voice moods, `jolly=ok|crit|spy|quiet|down|none`
+sets the stub's data (crit then ok gives feliz), and `pet=1` pats the eyes (cariño).
 `MUSE_SIM_BOARD=es3c40p` gives the 480x320 profile. `MUSE_SIM_JOLLY_DATA=ok|crit`
 fills the client stub with the fixtures' values. `MUSE_SIM_JOLLY_LINK=down`
 gives no link, and `tile=N` in a scenario shows the tileview's column N.
+
+## The mouth
+
+It sits under the eyes, in their colour, and changes with the mood behind the
+same blink. The eyes keep their size and spacing, 26 px higher.
+
+| Mood | Mouth |
+|---|---|
+| tranquilo | a small soft smile (arc) |
+| feliz, cariño | a bigger smile |
+| hablando | opens and closes with the reply's loudness (the level `muse_voice` sets from the PCM it plays), or a natural syllable pattern between words |
+| escuchando | a small "o" |
+| pensando | a short flat line, to one side |
+| espía | a flat line |
+| alerta | a big "O", trembling with the eyes |
+| durmiendo | a tiny line and a swelling snore bubble |
+| desconectado | a flat grey line |
 
 ## Decisions
 
