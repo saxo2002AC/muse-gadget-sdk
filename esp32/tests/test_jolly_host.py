@@ -20,6 +20,7 @@ CASES = {
     'mood': ['jolly/jolly_mood.c'],
     'glance': ['jolly/jolly_glance.c'],
     'text': ['jolly/jolly_text.c'],
+    'mouth': ['jolly/jolly_mouth.c'],
 }
 JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
@@ -87,6 +88,10 @@ class JollyHost(unittest.TestCase):
             self.skipTest(f'no cJSON at {JSON}: run idf.py reconfigure first')
         code, out = build_and_run('glance', CASES['glance'], extra=['-I', str(JSON), str(JSON / 'cJSON.c')],
                                   args=[str(TESTS)])
+        self.assertEqual(code, 0, out)
+
+    def test_mouth(self):
+        code, out = build_and_run('mouth', CASES['mouth'], extra=['-lm'])
         self.assertEqual(code, 0, out)
 
     def test_mood(self):

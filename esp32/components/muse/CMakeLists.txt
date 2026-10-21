@@ -55,7 +55,8 @@ if(CONFIG_MUSE_ENABLED)
         list(APPEND srcs "fonts/jolly_font_12.c" "fonts/jolly_font_16.c" "fonts/jolly_font_20.c" "fonts/jolly_font_28.c"
              "fonts/jolly_font_48d.c")
         list(APPEND srcs "jolly/jolly_mood.c" "jolly/jolly_eyes.c" "jolly/jolly_glance.c" "jolly/jolly_client.c"
-             "jolly/jolly_text.c" "jolly/jolly_pages.c")
+             "jolly/jolly_text.c" "jolly/jolly_pages.c"
+             "jolly/jolly_mouth.c")
     endif()
     if(CONFIG_MUSE_CJK_FONT)
         list(APPEND srcs "fonts/muse_font_cjk_16.c")   # captions' CJK fallback
