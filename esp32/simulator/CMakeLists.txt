@@ -162,6 +162,7 @@ if(MUSE_SIM_JOLLY)
     target_sources(muse_simulator PRIVATE
         "${MUSE_COMPONENT_DIR}/jolly/jolly_mood.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_eyes.c"
+        src/sim_jolly.c
     )
     target_compile_definitions(muse_simulator PRIVATE CONFIG_MUSE_JOLLY=1)
 endif()

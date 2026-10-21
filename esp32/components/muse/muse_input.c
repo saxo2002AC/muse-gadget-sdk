@@ -41,6 +41,9 @@
 #include "muse_mem.h"
 #include "muse_menu.h"
 #include "muse_secret.h"
+#if CONFIG_MUSE_JOLLY
+#include "jolly/jolly_client.h"
+#endif
 #include "muse_settings.h"
 #include "muse_state.h"
 #include "muse_tts.h"
@@ -712,6 +715,11 @@ static bool console_command(char *line, bool whole)
     if (whole && muse_board->console && muse_board->console(line)) {
         return true;
     }
+#if CONFIG_MUSE_JOLLY
+    if (whole && jolly_client_console_command(line)) {   /* the Guardián's URL and key: serial only */
+        return true;
+    }
+#endif
     /* A secret's line no handler took (a typo, no '=', too long to read
      * whole) stops here: the setup commands below would log it. */
     if (muse_secret_console_only(line)) {
@@ -830,6 +838,9 @@ static void serial_task(void *arg)
             bool whole = read_line(line ? line : none, line ? SERIAL_LINE : sizeof(none));
             if (line && !console_command(line, whole)) {
                 muse_ble_command(line);
+            }
+            if (line) {
+                memset(line, 0, SERIAL_LINE);   /* it may have held a key: don't leave it in freed memory */
             }
             free(line);
         } else if (c == 'd' || c == 'u') {

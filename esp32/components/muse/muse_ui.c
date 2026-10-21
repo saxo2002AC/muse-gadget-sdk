@@ -41,6 +41,7 @@
 #include "muse_menu.h"
 #include "muse_pixel.h"
 #if CONFIG_MUSE_JOLLY
+#include "jolly/jolly_client.h"
 #include "jolly/jolly_eyes.h"
 #include "jolly/jolly_mood.h"
 #endif
@@ -512,6 +513,8 @@ static void on_canvas_clicked(lv_event_t *e)
 
 #if CONFIG_MUSE_JOLLY
 static int64_t s_pet_until_ms, s_feliz_until_ms;
+static jolly_level_t s_prev_level = JLV_OK;
+static jolly_glance_t s_glance;   /* the latest, copied each frame: not on the LVGL task's stack */
 
 /* A pat on Jolly's eyes: cariño for a moment (the heart is the eyes' own). */
 static void on_jolly_pet(void)
@@ -521,14 +524,22 @@ static void on_jolly_pet(void)
 }
 
 /* Jolly in the avatar's place: the mood from Muse's voice, a pat and the Mac
- * Mini, then a frame of the eyes. The Guardián's link and levels arrive with
- * its client; until then the Mini reads as fine. */
+ * Mini's Guardián (jolly_client), then a frame of the eyes. */
 static void jolly_tick(muse_mode_t mode)
 {
     int64_t now = esp_timer_get_time() / 1000;
+    jolly_linkstate_t link;
+    bool have = jolly_client_snapshot(&s_glance, &link);
+    jolly_level_t level = have ? s_glance.level : JLV_OK;
+    if (have && link.link == JL_OK) {
+        /* A crit that clears: feliz for a moment. */
+        s_feliz_until_ms = jolly_mood_feliz_until(s_prev_level, level, now, s_feliz_until_ms);
+        s_prev_level = level;
+    }
     jolly_mood_in_t in = {
-        .voice = mode, .link = JL_OK, .level = JLV_OK, .sec_level = JLV_OK, .quiet = false,
-        .now_ms = now, .pet_until_ms = s_pet_until_ms, .feliz_until_ms = s_feliz_until_ms,
+        .voice = mode, .link = link.link, .level = level, .sec_level = have ? s_glance.sec.level : JLV_OK,
+        .quiet = have && s_glance.quiet, .now_ms = now, .pet_until_ms = s_pet_until_ms,
+        .feliz_until_ms = s_feliz_until_ms,
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
     jolly_eyes_tick(now);
