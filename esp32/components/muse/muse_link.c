@@ -86,10 +86,10 @@ bool muse_link_talk_press(void)
     return s_ops && s_ops->talk_press && s_ops->talk_press();
 }
 
-void muse_link_reset_setup(void)
+void muse_link_reset_setup(const char *why)
 {
     if (s_ops && s_ops->reset_setup) {
-        s_ops->reset_setup();
+        s_ops->reset_setup(why);
     }
 }
 

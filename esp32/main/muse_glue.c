@@ -34,6 +34,7 @@
 #include "identity.h"
 #include "noise_control.h"
 #include "sdk_token_console.h"
+#include "reset_note.h"
 #include "stack_monitor.h"
 #include "wifi_known.h"
 #include "wifi_mgr.h"
@@ -238,6 +239,7 @@ static bool seen_in_scan_locked(const char *ssid) {
 }
 
 static void op_wifi_set(const char *ssid, const char *pass) {
+    if (!ssid[0]) reset_note("wifi set to none (every saved network forgotten)");
     portENTER_CRITICAL(&s_lock);
     strlcpy(s_ssid, ssid, sizeof(s_ssid));
     strlcpy(s_pass, ssid[0] ? pass : "", sizeof(s_pass));
@@ -279,6 +281,8 @@ static int op_wifi_saved(muse_wifi_saved_t *out, int max) {
 }
 
 static void op_wifi_forget(const char *ssid) {
+    // Forgetting the last network makes the next boot wipe setup (app.c).
+    reset_note("wifi forget: %s", ssid && ssid[0] ? ssid : "all networks");
     if (!ssid || !ssid[0]) {
         op_wifi_set("", "");
         return;
@@ -382,13 +386,18 @@ static bool op_sdk_token_set(const char *token) {
     return true;
 }
 
+// The app's serial console lines: >whyreset, then the SDK token.
+static bool console_command(const char *line) {
+    return reset_note_console_command(line) || sdk_token_console_command(line);
+}
+
 static bool op_talk_press(void) {
     return app_confirm_pairing_press();
 }
 
-static void op_reset_setup(void) {
-    ESP_LOGW(TAG, "setup reset from Muse");
-    app_reset_setup_async();
+static void op_reset_setup(const char *why) {
+    ESP_LOGW(TAG, "setup reset from Muse: %s", why);
+    app_reset_setup_async(why);
 }
 
 static const muse_link_ops_t s_ops = {
@@ -635,7 +644,7 @@ void muse_glue_start(void) {
     muse_input_power_init();
     s_ready = xEventGroupCreate();
     muse_link_register(&s_ops);
-    muse_input_set_console_hook(sdk_token_console_command);
+    muse_input_set_console_hook(console_command);
     muse_ble_set_name(identity_ble_name());
     ble_companion_t companion = {
         .svcs = muse_ble_services(),

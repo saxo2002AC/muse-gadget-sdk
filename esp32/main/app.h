@@ -56,8 +56,9 @@ bool app_wifi_nap(void);
 void app_ble_companion_set(bool advertise);
 // A talk-button press. Returns true when it confirmed a pending pairing.
 bool app_confirm_pairing_press(void);
-// Full setup reset and reboot, from a worker task.
-void app_reset_setup_async(void);
+// Full setup reset and reboot, from a worker task. `why`, a string literal,
+// is the source reset_note() keeps.
+void app_reset_setup_async(const char *why);
 #endif
 
 #if CONFIG_MUSE_ENABLED || CONFIG_HOMEHUB_VOICE

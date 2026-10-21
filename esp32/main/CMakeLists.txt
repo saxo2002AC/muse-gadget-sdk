@@ -28,6 +28,8 @@ set(GADGET_SRCS
     "wifi_known.c"
     "identity.c"
     "sdk_token_console.c"
+    "reset_note.c"
+    "reset_note_text.c"
     "config_store.c"
     "vm_api.c"
     "diagnostic_log.c"

@@ -472,7 +472,7 @@ static void handle(muse_menu_key_t key)
             if (power) muse_input_request_power_off();
             else {
                 muse_state_set_caption("RESETTING...");
-                muse_link_reset_setup();
+                muse_link_reset_setup("button menu: Reset confirmed");
             }
         }
         break;

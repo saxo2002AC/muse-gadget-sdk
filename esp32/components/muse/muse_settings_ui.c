@@ -885,7 +885,7 @@ static void on_link_reset(lv_event_t *e)
     int64_t now = esp_timer_get_time();
     if (s_link_reset_armed_us && now - s_link_reset_armed_us < 5000000) {
         set_text(s_link_reset_lbl, "Resetting...");
-        muse_link_reset_setup();
+        muse_link_reset_setup("settings: Reset pairing tapped twice");
         return;
     }
     s_link_reset_armed_us = now;

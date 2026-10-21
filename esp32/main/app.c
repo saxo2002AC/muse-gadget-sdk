@@ -44,6 +44,7 @@
 
 #include "identity.h"
 #include "sdk_token_console.h"
+#include "reset_note.h"
 #include "config_store.h"
 #include "wifi_mgr.h"
 #include "wifi_known.h"
@@ -766,6 +767,7 @@ static void store_pairing_username_unlocked(const char *username) {
 
 static void handle_token_revoked_unlocked(const char *context) {
     ESP_LOGW(TAG, "%s: device credentials rejected; clearing pairing", context);
+    reset_note("pairing cleared: token rejected (%s)", context);
     s_last_vm_auth_refresh_attempt_us = 0;
     s_vm_auth_refresh_interval_us = VM_AUTH_REFRESH_RETRY_INTERVAL_US;
     s_vm_auth_refusals = 0;
@@ -783,6 +785,7 @@ static void defer_token_revocation_reset(void) {
         return;
     }
     ESP_LOGW(TAG, "token revoked - deferring setup reset to app task");
+    reset_note("token revoked: setup reset deferred");
     atomic_store_explicit(&s_setup_reset_pending, true, memory_order_release);
 }
 
@@ -1405,6 +1408,7 @@ static void finish_setup_reset_with_gate_held(void) {
 }
 
 static bool reset_setup_with_gate_held(const char *source) {
+    reset_note("%s", source);   // WARN, and kept for >whyreset
     ESP_LOGI(TAG, "%s - reset setup", source);
     setup_stage_set("reset");
     if (!setup_wipe_to_clean()) {
@@ -2430,14 +2434,14 @@ bool app_confirm_pairing_press(void) {
 }
 
 static void reset_setup_task(void *arg) {
-    (void)arg;
-    reset_setup_from_control("Muse menu reset");
+    reset_setup_from_control(arg ? (const char *)arg : "Muse menu reset");
     stack_monitor_record(NULL);
     vTaskDelete(NULL);
 }
 
-void app_reset_setup_async(void) {
-    if (xTaskCreate(reset_setup_task, "muse_reset", 4096, NULL, 4, NULL) != pdPASS) {
+void app_reset_setup_async(const char *why) {
+    if (xTaskCreate(reset_setup_task, "muse_reset", 4096, (void *)why, 4, NULL) != pdPASS) {
+        reset_note("%s (deferred: no task)", why ? why : "Muse menu reset");
         atomic_store_explicit(&s_setup_reset_pending, true, memory_order_release);
     }
 }
@@ -2489,6 +2493,7 @@ static void on_ws_control_status(const char *status) {
             // This callback runs on the Noise control task. Resetting inline
             // would make noise_ctrl_disconnect() wait for its own task to exit.
             ESP_LOGE(TAG, "server unpair worker unavailable; deferring reset");
+            reset_note("server unpair (node.unpaired), deferred");
             atomic_store_explicit(&s_setup_reset_pending, true,
                                   memory_order_release);
         }
@@ -2667,6 +2672,7 @@ void app_run(void) {
             // clear it so we boot clean instead of auto-reconnecting half-paired.
             ESP_LOGW(TAG, "partial setup at boot (wifi=%d token=%d); clearing for clean pair",
                      have_wifi, provisioned);
+            reset_note("boot: partial setup (wifi=%d token=%d)", have_wifi, provisioned);
             if (!config_clear_setup()) {
                 ESP_LOGE(TAG, "partial setup deletion could not be verified");
             }
@@ -2675,6 +2681,7 @@ void app_run(void) {
             // pairing refused once setup is done, the device would be stuck,
             // so start over and let the app pair it again.
             ESP_LOGW(TAG, "setup done but no saved wifi; clearing for a fresh pair");
+            reset_note("boot: setup done but no saved wifi (token=%d)", provisioned);
             if (!config_clear_setup()) {
                 ESP_LOGE(TAG, "setup deletion could not be verified");
             }

@@ -70,6 +70,7 @@ class LinkEndpointLifecycleTest(unittest.TestCase):
 #include "diagnostic_log.h"
 #define CONFIG_MUSE_ENABLED 0
 #define ESP_LOGW(...) ((void)0)
+#define reset_note(...) ((void)0)
 #define ESP_LOGE(...) ((void)0)
 #define ESP_OK 0
 #define ESP_OTA_IMG_PENDING_VERIFY 1

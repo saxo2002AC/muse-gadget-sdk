@@ -36,6 +36,7 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 >lcd / >lcd_orient=0|1 / >lcd_madctl=S,X,Y / >lcd_touchlog=1
 >tts_url=http://Mac-mini-de-acserver.local:3024 / >tts_key=...
 >dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, forgets}
+>whyreset                                          the last 4 setup-wipe sources with uptime, kept across resets
 ```
 
 An empty value clears a setting. A line in the `grd_`, `tts_`, `sdk_token` or
