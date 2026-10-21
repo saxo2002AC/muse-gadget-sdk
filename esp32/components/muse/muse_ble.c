@@ -28,6 +28,7 @@
 
 #include "muse_chat.h"
 #include "muse_link.h"
+#include "muse_secret.h"
 #include "muse_settings.h"
 #include "muse_state.h"
 #include "muse_voice.h"
@@ -176,7 +177,7 @@ static void run_command(char *cmd)
     }
 
     /* Never echo secrets back. */
-    bool secret = !strcmp(cmd, "wifi.pass") || !strncmp(cmd, "hatch.token", 11);
+    bool secret = muse_secret_value(cmd);
     snprintf(s_last, sizeof(s_last), "%s: %s", cmd, res);
     ESP_LOGI(TAG, "cmd %s%s%s -> %s", cmd, secret ? "" : "=", secret ? "" : v, res);
     muse_state_poke();

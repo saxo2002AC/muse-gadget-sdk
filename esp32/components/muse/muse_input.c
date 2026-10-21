@@ -40,6 +40,7 @@
 #include "muse_link.h"
 #include "muse_mem.h"
 #include "muse_menu.h"
+#include "muse_secret.h"
 #include "muse_settings.h"
 #include "muse_state.h"
 #include "muse_tts.h"
@@ -708,6 +709,14 @@ static bool console_command(char *line, bool whole)
         return true;
     }
 #endif
+    /* A secret's line no handler took (a typo, no '=', too long to read
+     * whole) stops here: the setup commands below would log it. */
+    if (muse_secret_console_only(line)) {
+        ESP_LOGW(TAG, "invalid secret command");
+        printf("@error invalid secret command\n");
+        fflush(stdout);
+        return true;
+    }
     if (!strcmp(line, "status")) {
         size_t cap = 1024;   /* long SSID, host and VM names escaped: past 512 */
         char *json = heap_caps_malloc(cap, MUSE_BIG_CAPS);
