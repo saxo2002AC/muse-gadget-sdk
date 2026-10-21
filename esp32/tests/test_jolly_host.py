@@ -17,6 +17,7 @@ TESTS = ROOT / 'tests/jolly'
 CASES = {
     'orient': ['boards/es3c40p_orient.c'],
     'url': ['muse_url.c'],
+    'mood': ['jolly/jolly_mood.c'],
 }
 
 
@@ -68,6 +69,10 @@ class JollyHost(unittest.TestCase):
 
     def test_orient(self):
         code, out = build_and_run('orient', CASES['orient'])
+        self.assertEqual(code, 0, out)
+
+    def test_mood(self):
+        code, out = build_and_run('mood', CASES['mood'])
         self.assertEqual(code, 0, out)
 
     def test_url(self):
