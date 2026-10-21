@@ -40,6 +40,10 @@
 #include "muse_mem.h"
 #include "muse_menu.h"
 #include "muse_pixel.h"
+#if CONFIG_MUSE_JOLLY
+#include "jolly/jolly_eyes.h"
+#include "jolly/jolly_mood.h"
+#endif
 #include "muse_settings.h"
 #include "muse_settings_ui.h"
 #include "muse_state.h"
@@ -226,7 +230,9 @@ static lv_draw_buf_t *s_strips[STRIPS];
 static bool s_strip_busy[STRIPS];
 static uint16_t *s_cells;       /* each cell's colour as last invalidated */
 static uint16_t *s_cell_row;    /* one screen row of Muse */
-static bool s_cells_valid;
+#if !CONFIG_MUSE_JOLLY
+static bool s_cells_valid;   /* invalidate_muse() has a frame to compare with */
+#endif
 
 static lv_result_t muse_dec_info(lv_image_decoder_t *dec, lv_image_decoder_dsc_t *dsc, lv_image_header_t *header)
 {
@@ -316,6 +322,7 @@ static void muse_image_init(void)
     }
 }
 
+#if !CONFIG_MUSE_JOLLY   /* Jolly's eyes take the avatar's place: it's never drawn */
 /*
  * Most frames change only a few of Muse's cells, so only those are redrawn.
  * Each frame reads back one screen pixel of every cell (its first, which the
@@ -396,6 +403,7 @@ static void invalidate_muse(void)
         lv_obj_invalidate_area(s_canvas, &a);
     }
 }
+#endif
 
 static lv_obj_t *make_label(lv_obj_t *parent, const lv_font_t *font, uint32_t color);
 
@@ -501,6 +509,31 @@ static void on_canvas_clicked(lv_event_t *e)
     (void)e;
     muse_state_make_happy();
 }
+
+#if CONFIG_MUSE_JOLLY
+static int64_t s_pet_until_ms, s_feliz_until_ms;
+
+/* A pat on Jolly's eyes: cariño for a moment (the heart is the eyes' own). */
+static void on_jolly_pet(void)
+{
+    muse_state_make_happy();
+    s_pet_until_ms = jolly_mood_pet_until(esp_timer_get_time() / 1000);
+}
+
+/* Jolly in the avatar's place: the mood from Muse's voice, a pat and the Mac
+ * Mini, then a frame of the eyes. The Guardián's link and levels arrive with
+ * its client; until then the Mini reads as fine. */
+static void jolly_tick(muse_mode_t mode)
+{
+    int64_t now = esp_timer_get_time() / 1000;
+    jolly_mood_in_t in = {
+        .voice = mode, .link = JL_OK, .level = JLV_OK, .sec_level = JLV_OK, .quiet = false,
+        .now_ms = now, .pet_until_ms = s_pet_until_ms, .feliz_until_ms = s_feliz_until_ms,
+    };
+    jolly_eyes_set_mood(jolly_mood_pick(&in));
+    jolly_eyes_tick(now);
+}
+#endif
 
 static const lv_font_t *font_pick(const lv_font_t *full, const lv_font_t *compact)
 {
@@ -990,6 +1023,13 @@ static void build_screen(void)
     s_muse_y = s_big_y;
     lv_obj_add_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_canvas, on_canvas_clicked, LV_EVENT_CLICKED, NULL);
+#if CONFIG_MUSE_JOLLY
+    /* Jolly's eyes take the avatar's place. The canvas stays, since the layouts
+     * still move it, but hidden and never drawn (frame_tick). */
+    lv_obj_add_flag(s_canvas, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
+    jolly_eyes_create(face, s_big_y, on_jolly_pet);
+#endif
     if (s_ring) {
         /* The canvas's black corners reach the bezel; keep the ring on top. */
         lv_obj_move_foreground(s_ring);
@@ -1732,6 +1772,10 @@ static void frame_tick(lv_timer_t *timer)
     float level = muse_state_level();
     s_level += (level - s_level) * (level > s_level ? 0.6f : 0.2f);
 
+#if CONFIG_MUSE_JOLLY
+    (void)mode_t;
+    jolly_tick(mode);
+#else
     muse_pose_t pose = {
         .mode = mode,
         .t = now,
@@ -1741,6 +1785,7 @@ static void frame_tick(lv_timer_t *timer)
     };
     muse_pixel_render(&pose);
     invalidate_muse();
+#endif
 
     update_status(mode, now);
 }

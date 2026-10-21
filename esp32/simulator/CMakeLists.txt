@@ -36,6 +36,7 @@ option(MUSE_SIM_FETCH_DEPS
        ON)
 option(MUSE_SIM_SANITIZERS "Build the simulator with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(MUSE_SIM_WARNINGS_AS_ERRORS "Treat simulator warnings as errors" OFF)
+option(MUSE_SIM_JOLLY "Build Jolly's eyes in place of the avatar (CONFIG_MUSE_JOLLY)" OFF)
 
 set(MUSE_SIM_LVGL_VERSION "9.5.0")
 set(MUSE_SIM_SDL_MIN_VERSION "2.0.18")
@@ -156,6 +157,14 @@ add_executable(muse_simulator
     "${MUSE_COMPONENT_DIR}/muse_text.c"
     "${MUSE_COMPONENT_DIR}/../../avatar/muse_pixel.c"
 )
+
+if(MUSE_SIM_JOLLY)
+    target_sources(muse_simulator PRIVATE
+        "${MUSE_COMPONENT_DIR}/jolly/jolly_mood.c"
+        "${MUSE_COMPONENT_DIR}/jolly/jolly_eyes.c"
+    )
+    target_compile_definitions(muse_simulator PRIVATE CONFIG_MUSE_JOLLY=1)
+endif()
 
 target_include_directories(muse_simulator PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

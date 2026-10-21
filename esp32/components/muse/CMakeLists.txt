@@ -54,7 +54,7 @@ if(CONFIG_MUSE_ENABLED)
         # Montserrat with Latin-1 for Spanish (tools/muse/gen_jolly_fonts.sh).
         list(APPEND srcs "fonts/jolly_font_16.c" "fonts/jolly_font_20.c" "fonts/jolly_font_28.c"
              "fonts/jolly_font_48d.c")
-        list(APPEND srcs "jolly/jolly_mood.c")
+        list(APPEND srcs "jolly/jolly_mood.c" "jolly/jolly_eyes.c")
     endif()
     if(CONFIG_MUSE_CJK_FONT)
         list(APPEND srcs "fonts/muse_font_cjk_16.c")   # captions' CJK fallback
