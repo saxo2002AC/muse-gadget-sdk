@@ -1,6 +1,6 @@
 # Jolly, the Mac Mini's guardian
 
-Jolly is the LCDWIKI ES3C40P in landscape (480x320). Its eyes take the place of
+Jolly is the LCDWIKI ES3C40P in landscape (480x320). Its face takes the place of
 Muse's avatar and show how the Mac Mini is doing, and four status pages follow
 them: Mac Mini, Apps, Red and Seguridad. It reads everything from the
 Guardián (`saxo2002AC/warroom-guardian`), a read-only service on the Mini, through
@@ -15,8 +15,8 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 |---|---|---|
 | `../boards/es3c40p_orient.c` | landscape MADCTL and touch remap | `tests/jolly/test_orient.c` |
 | `jolly_mood.c` | the mood, first match wins (plan §1.9) | `tests/jolly/test_mood.c` |
-| `jolly_eyes.c` | the eyes and mouth: saccades, blinks, lids, hearts | simulator |
-| `jolly_mouth.c` | the mouth for each mood, and the talking opening | `tests/jolly/test_mouth.c` |
+| `jolly_face_spec.c` | face v5 as numbers: 16 moods, visemes, springs, blinks, head turn, mouth lines | `tests/jolly/test_face.c` |
+| `jolly_eyes.c` | draws face v5 from those numbers, per frame | simulator, `tools/jolly/face_sheet.py` |
 | `jolly_glance.c` | strict contract parsers, ETag check, link state (§1.8) | `tests/jolly/test_glance.c` |
 | `jolly_client.c` | the poll task, NVS config, console | device, `tools/jolly/fake_guardian.py` |
 | `jolly_text.c` | the pages' Spanish strings | `tests/jolly/test_text.c` |
@@ -67,27 +67,101 @@ MUSE_SIM_BOARD=es3c40p MUSE_SIM_JOLLY_DATA=crit <build>/muse_simulator --headles
 ```
 
 Scenario keys: `face=` drives the voice moods, `jolly=ok|crit|spy|quiet|down|none`
-sets the stub's data (crit then ok gives feliz), and `pet=1` pats the eyes (cariño).
+sets the stub's data (crit then ok gives feliz), `pet=1` pats the eyes (cariño),
+and `mood=<name>` holds the face on one mood, snapped and still (`mood=auto`
+gives it back to the arbiter). `tools/jolly/face_sheet.py <simulator> out.png`
+renders all 16 moods as one contact sheet: `esp32/docs/jolly/face-v5-moods.png`.
 `MUSE_SIM_BOARD=es3c40p` gives the 480x320 profile. `MUSE_SIM_JOLLY_DATA=ok|crit`
 fills the client stub with the fixtures' values. `MUSE_SIM_JOLLY_LINK=down`
 gives no link, and `tile=N` in a scenario shows the tileview's column N.
 
-## The mouth
+## The face (v5)
 
-It sits under the eyes, in their colour, and changes with the mood behind the
-same blink. The eyes keep their size and spacing, 26 px higher.
+Face v5, "robot con expresión", as Andrés approved it:
+`warroom-guardian/docs/mockup-cara-v5-fusion.html`. Every number comes from
+that mockup's script and CSS and lives in `jolly_face_spec.c`;
+`jolly_eyes.c` draws them in the mockup's own 480x320 coordinates (the face's
+box starts below the status line, at y 30).
 
-| Mood | Mouth |
-|---|---|
-| tranquilo | a small soft smile (arc) |
-| feliz, cariño | a bigger smile |
-| hablando | opens and closes with the reply's loudness (the level `muse_voice` sets from the PCM it plays), or a natural syllable pattern between words |
-| escuchando | a small "o" |
-| pensando | a short flat line, to one side |
-| espía | a flat line |
-| alerta | a big "O", trembling with the eyes |
-| durmiendo | a tiny line and a swelling snore bubble |
-| desconectado | a flat grey line |
+![The 16 moods](../../../docs/jolly/face-v5-moods.png)
+
+- **Eyes:** 112x128 rounded rects at x 170 and 310, a vertical gradient from
+  light to dark, a lighter 3 px rim, a glow (a shadow in the mood's colour), a
+  white highlight that moves with the gaze, and a faint shadow below. Lids in
+  the background colour: a top one that can slant (a thick `lv_line`, for
+  enojado's V), a bottom one, and the curved one of feliz's ^^ (a big circle
+  rising from below). Closed eyes are 9 px `lv_arc`s, ^ (cariño, the guiño's
+  right eye) or ‿ (durmiendo). Mareado's are hollow with three spinning arcs;
+  asustado's are round; alerta's have a core dot.
+- **Brows:** 84x9 bars, 2-point `lv_line`s, rotated and raised per mood.
+- **Mouths:** smile, big smile, smirk, side, flat, zigzag and wave as
+  `lv_line`s (the mockup's SVG paths, sampled); the talking pill; a ring; an
+  LED grill whose teeth flicker; the pill's pixel tongue (feliz) and a tongue
+  out the corner (guiño).
+- **Extras:** "///" blush, hearts (cariño, and a pat), zzz, a sweat drop
+  (asustado), sigh puffs (aliviado), the alert's pulsing screen border, and a
+  white flash when aliviado or enojado come in (a landing, a knock).
+
+| Mood | Eyes | Mouth | Extras |
+|---|---|---|---|
+| tranquilo | open, wandering | smile | |
+| escuchando | bigger, brows up | small ring | |
+| pensando | look up and aside, lower lids | to one side | |
+| hablando | open | the pill, by the reply's level | brows follow the level |
+| feliz | ^^ (curved lids) | open pill, laughing | tongue, blush |
+| cariño | closed ^ | big smile | hearts, blush |
+| durmiendo | closed ‿ | tiny breathing ring | zzz |
+| espía | narrowed, looking aside | smirk | |
+| alerta | tall, core dot | big ring | shakes, border pulses |
+| desconectado | slits, grey | flat | |
+| mareado | spirals | zigzag | sways |
+| asustado | small, round, apart | wave | trembles, sweat drop |
+| aliviado | half-lidded | smile | sigh puffs |
+| enojado | slanted lids, V brows | LED grill | shudders, red blush |
+| sorprendido | tall, brows very high | big ring | |
+| guiño | right eye ^ | smile | tongue out |
+
+**Motion.** Each number springs to its target (`v = (v + (t − x) k) · 0.74`,
+k 0.11, 0.35 for the talking pill), stepped at the mockup's 60 Hz whatever the
+frame rate. A new mood comes in with anticipation: the eyes squash and the
+brows dip first (more for sorprendido, alerta and asustado), then overshoot.
+Saccades follow each mood's range and rhythm, on their own spring (k 0.22,
+0.62). Parallax: eyes 0.8 of the gaze, the highlight 0.3 more, brows 1.0,
+mouth 0.5. The head turn widens the eye it turns toward and narrows the other,
+16 % at most. Blinks squash and stretch (`sx = 1 + 0.08b`, `sy = 1 − 0.9b`):
+single 180 ms, double (20 %) or slow 720 ms (12 %), every 1.8–5.2 s
+(3.5–6.5 s pensando), in the moods that blink. Brows and mouth breathe ±2 px
+over 3.2 s.
+
+**Talking.** The pill follows the reply's level (`muse_voice` sets it from the
+PCM it plays) in five visemes: cerrada under 0.08, chica under 0.32, media
+under 0.6, ancha above; a loud syllable rounds into an O about one time in
+six.
+
+**Redraw budget.** Only what changed redraws: every setter compares first (a
+style set or hiding a hidden object redraws even when nothing changes), lines
+and the mouth have fixed boxes, and the glow is dropped while an eye moves (it
+returns after 300 ms still). The alert's border is four 3 px strips, so its
+pulse redraws them and not the screen, in four steps per second; the flash
+steps four times in 260 ms. Between saccades and blinks only the breathing
+brows and mouth redraw, when they move a whole pixel. Moods that jitter
+(alerta, enojado, asustado, mareado) or laugh (feliz) redraw their parts every
+frame, as the mockup moves them.
+
+**Arbiter.** Voice, then a pat (cariño), then motion (unless a current crit),
+no link (desconectado), crit (alerta), the level just worsened (sorprendido,
+2 s), a security warning (espía), a warning just cleared (guiño, 2.4 s), a crit
+just cleared (feliz, 4 s), quiet hours (durmiendo), else tranquilo.
+
+**Not from the mockup:** the whole face's tilt (mareado's and the eye
+rotation by gaze) and the frame's shaking and tossing, which only show the
+sensors in a browser. The background stays the UI's black, so the lids and
+core dot are black, and the eye's shadow is a faint reflection in the mood's
+colour instead of a darker patch. The gradient has two stops
+(`LV_GRADIENT_MAX_STOPS` is 2), light top to dark bottom. Feliz's pill has one
+radius (20) where the mockup rounds its bottom more. With Jolly, Muse's caption
+band moves under the status line, since the face now reaches the page dots, and
+it stays hidden while it's empty.
 
 ## Touch and motion
 
@@ -103,7 +177,7 @@ same blink. The eyes keep their size and spacing, 26 px higher.
 
 | Motion | Mood | For |
 |---|---|---|
-| shake (acceleration spread > 450 mg for 400 ms) | mareado | 3 s |
+| shake (acceleration spread > 450 mg for 400 ms) | sorprendido, then mareado | 1 s, then 3 s |
 | freefall (< 0.3 g for 120 ms) | asustado | until the landing, 1.5 s at most |
 | landing (> 2 g within 1.5 s of a fall) | aliviado | 2.5 s |
 | knock (> 2.5 g for ≤ 30 ms, idle or touched) | enojado | 2 s |
@@ -124,19 +198,25 @@ front. `>imu` shows which way gravity reads once it's fitted.
   layout (`short_landscape`). The full layout needs about 466 px.
 - **One chip:** the status bar is the same on every page, as the plan says.
   The mockup's per-page chips ("Internet OK", "SSH 0 fallos") aren't used.
+- **IMU thresholds:** face v5's table proposes 50 Hz, a shake as 4 crossings
+  over 1.5 g within 1 s, and face-down after 1 s with the screen dimmed. The
+  detector keeps its own (above), which its tests pin down; dimming isn't
+  wired. To be settled once an MPU-6050 is on the board.
 - **mDNS:** `.local` names are resolved through lwIP's one-shot query
   (`CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES`), so there's no mdns component.
 
 ## Not in v1
 
-- **Eyes:** escuchando's waves, pensando's dots, hablando's EQ bars, the mood
-  label under the eyes, and the radar sweep.
+- **Eyes:** the v3 mockup's escuchando waves, pensando dots, hablando EQ bars,
+  mood label and radar sweep (face v5 replaced them).
 - **Pages:** pulsing status dots, sliding new events, the dashed tx line, and an
   on-screen talk button in landscape. BOOT does push-to-talk.
 
 ## Status
 
-Built and host-tested. The simulator renders the eyes and all four pages.
-**Not yet on hardware:** orientation, touch corners, internal RAM at idle
+Built and host-tested. The simulator renders face v5 (all 16 moods) and all
+four pages.
+**Not yet on hardware:** face v5's frame rate and redraw cost on the SPI panel,
+orientation, touch corners, internal RAM at idle
 (plan gate ≥16 KB: read `UI built: free internal` and `ready: ... internal`),
 and the live link against the fake or the real Guardián.

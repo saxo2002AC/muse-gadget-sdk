@@ -164,7 +164,6 @@ if(MUSE_SIM_JOLLY)
         "${MUSE_COMPONENT_DIR}/jolly/jolly_eyes.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_pages.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_text.c"
-        "${MUSE_COMPONENT_DIR}/jolly/jolly_mouth.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_gesture.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_motion.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_face_spec.c"

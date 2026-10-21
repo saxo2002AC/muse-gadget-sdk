@@ -26,15 +26,20 @@ extern "C" {
 #endif
 
 /*
- * Jolly's eyes and mouth: two rounded rectangles (style B, "robot") with lids, in the
- * mood's colour, that wander (saccades), blink (single, double or slow, with
- * squash and stretch) and take a new mood behind a blink. Cariño sways and
- * sends hearts up; a pat adds one where it landed. Everything is computed
- * per frame from the clock (jolly_eyes_tick), so only the eyes' area redraws.
- * Call all of these on the LVGL task.
+ * Jolly's face, v5 "robot con expresión" (warroom-guardian
+ * docs/mockup-cara-v5-fusion.html; numbers in jolly_face_spec.h): glowing
+ * rounded-rect eyes with a highlight, a rim, a shadow and lids, bar brows, a
+ * mouth per mood (lines, the talking pill, a ring, LED teeth) and extras
+ * (blush, hearts, zzz, a sweat drop, sigh puffs, spirals, the alert's core
+ * dot). It moves on springs: anticipation and overshoot on a mood change,
+ * saccades with parallax and a head turn, squash-and-stretch blinks, and
+ * breathing on the brows and mouth. Everything is computed per frame from
+ * the clock (jolly_eyes_tick) and only what changed redraws; the glow goes
+ * while an eye moves. Call all of these on the LVGL task.
  */
 
-/* Creates the eyes centred in `parent`, `y` px below its centre. A tap on
+/* Creates the face on `parent`, a 480x320 tile, in the mockup's coordinates
+ * (`y`, the old avatar's offset, is unused). A tap on
  * them calls on_pet after its heart; a hold (jolly_gesture.h) calls
  * on_hold(true), and on_hold(false) when it ends. Either may be NULL. */
 void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (*on_hold)(bool down));
@@ -45,21 +50,24 @@ bool jolly_eyes_holding(void);
 /* A finger is on Jolly's face at all. Safe to read from any task. */
 bool jolly_eyes_touched(void);
 
-/* The mood to show: applied behind the next blink, or now for moods that
- * don't blink. */
+/* The mood to show: it springs in, with anticipation (jolly_face_spec.h). */
 void jolly_eyes_set_mood(jolly_mood_t m);
+
+/* Holds the face on mood `m`, snapped to it with no motion (benches, the
+ * simulator's contact sheet); JM_COUNT gives it back to jolly_eyes_set_mood. */
+void jolly_eyes_show(jolly_mood_t m);
 
 /* A pat in the middle of the eyes, as a tap there (benches, the simulator). */
 void jolly_eyes_tap(void);
 
-/* A heart at (x, y), in the eyes' own coordinates. */
+/* A heart at (x, y), in the face's own coordinates (the box below the status line). */
 void jolly_eyes_pet(int32_t x, int32_t y);
 
 /* Advances everything to now_ms (the board's monotonic clock), once a frame.
  * `level` is the reply's loudness (0..1) for the talking mouth. */
 void jolly_eyes_tick(int64_t now_ms, float level);
 
-/* The mood's colour, 0xRRGGBB (the guardian plan's table). */
+/* The mood's colour, 0xRRGGBB (face v5's table). */
 uint32_t jolly_mood_color(jolly_mood_t m);
 
 #ifdef __cplusplus

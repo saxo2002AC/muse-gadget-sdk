@@ -17,6 +17,7 @@
 #include "jolly/jolly_face_spec.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #define O JFE_OPEN
 #define U JFE_CLOSED_UP
@@ -73,6 +74,26 @@ static const jolly_face_mood_t FACES[JM_COUNT] = {
 const jolly_face_mood_t *jolly_face_mood(jolly_mood_t m)
 {
     return &FACES[(unsigned)m < JM_COUNT ? m : JM_TRANQUILO];
+}
+
+static const char *const NAMES[JM_COUNT] = {
+    "tranquilo", "escuchando", "pensando", "hablando", "feliz", "carino", "durmiendo", "espia",
+    "alerta", "desconectado", "mareado", "asustado", "aliviado", "enojado", "sorprendido", "guino",
+};
+
+const char *jolly_face_name(jolly_mood_t m)
+{
+    return NAMES[(unsigned)m < JM_COUNT ? m : JM_TRANQUILO];
+}
+
+jolly_mood_t jolly_face_named(const char *name)
+{
+    for (int i = 0; i < JM_COUNT; i++) {
+        if (!strcmp(name, NAMES[i])) {
+            return (jolly_mood_t)i;
+        }
+    }
+    return JM_COUNT;
 }
 
 jolly_viseme_t jolly_face_viseme(float level, bool round)

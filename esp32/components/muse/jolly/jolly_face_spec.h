@@ -90,6 +90,11 @@ typedef struct {
 /* The mood's face; out of range reads as tranquilo. */
 const jolly_face_mood_t *jolly_face_mood(jolly_mood_t m);
 
+/* The mood's name, ASCII Spanish ("carino", "guino"), and back: JM_COUNT
+ * for a name that isn't one (the simulator's mood= key, the >imu line). */
+const char *jolly_face_name(jolly_mood_t m);
+jolly_mood_t jolly_face_named(const char *name);
+
 #define JOLLY_FACE_BLUSH 0xFF8FB8
 #define JOLLY_FACE_TONGUE 0xFF6F91
 

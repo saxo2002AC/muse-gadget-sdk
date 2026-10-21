@@ -1141,8 +1141,15 @@ static void build_screen(void)
         lv_obj_set_style_bg_color(s_caption_lbl, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(s_caption_lbl, LV_OPA_70, 0);
         lv_label_set_long_mode(s_caption_lbl, LV_LABEL_LONG_MODE_DOTS);
+#if CONFIG_MUSE_JOLLY
+        /* Jolly's face v5 reaches down to the dots: the band goes under the
+         * status line instead, where only a startled brow ever rises. */
+        lv_obj_align(s_caption_lbl, LV_ALIGN_TOP_MID, 0, 30);
+#else
         /* Touch screens need the caption above the navigation dots too. */
         lv_obj_align(s_caption_lbl, LV_ALIGN_BOTTOM_MID, 0, (s_tall || s_tv) ? -30 : -3);
+#endif
+        lv_obj_add_flag(s_caption_lbl, LV_OBJ_FLAG_HIDDEN);   /* empty until a caption comes */
 #if CONFIG_MUSE_CJK_FONT
         /* CJK doesn't fit unscii-8's cell, so a reply with CJK in it fills the
          * band one line at a time in the 16 px caption font instead. */

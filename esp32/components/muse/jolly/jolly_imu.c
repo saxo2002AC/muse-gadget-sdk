@@ -15,6 +15,7 @@
  */
 
 #include "jolly/jolly_imu.h"
+#include "jolly/jolly_face_spec.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -164,10 +165,6 @@ bool jolly_imu_console_command(const char *line)
     if (strcmp(line, "imu") != 0) {
         return false;
     }
-    static const char *const MOODS[JM_COUNT] = {
-        "tranquilo", "escuchando", "pensando", "hablando", "feliz", "carino", "durmiendo", "espia",
-        "alerta", "desconectado", "mareado", "asustado", "aliviado", "enojado", "sorprendido", "guino",
-    };
     int16_t mg[3];
     taskENTER_CRITICAL(&s_mux);
     memcpy(mg, s_mg, sizeof(mg));
@@ -175,7 +172,7 @@ bool jolly_imu_console_command(const char *line)
     jolly_mood_t m = jolly_imu_mood(esp_timer_get_time() / 1000);
     printf("@imu {\"present\":%s,\"who\":\"0x%02x\",\"g\":[%.3f,%.3f,%.3f],\"mood\":\"%s\"}\n",
            s_present ? "true" : "false", s_who, mg[0] / 1000.0, mg[1] / 1000.0, mg[2] / 1000.0,
-           m < JM_COUNT && s_present && m != JM_TRANQUILO ? MOODS[m] : "");
+           s_present && m != JM_TRANQUILO ? jolly_face_name(m) : "");
     fflush(stdout);
     return true;
 }

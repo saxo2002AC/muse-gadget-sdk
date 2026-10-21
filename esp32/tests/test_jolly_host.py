@@ -20,7 +20,6 @@ CASES = {
     'mood': ['jolly/jolly_mood.c'],
     'glance': ['jolly/jolly_glance.c'],
     'text': ['jolly/jolly_text.c'],
-    'mouth': ['jolly/jolly_mouth.c'],
     'gesture': ['jolly/jolly_gesture.c'],
     'motion': ['jolly/jolly_motion.c', 'jolly/jolly_mood.c'],
     'face': ['jolly/jolly_face_spec.c'],
@@ -91,10 +90,6 @@ class JollyHost(unittest.TestCase):
             self.skipTest(f'no cJSON at {JSON}: run idf.py reconfigure first')
         code, out = build_and_run('glance', CASES['glance'], extra=['-I', str(JSON), str(JSON / 'cJSON.c')],
                                   args=[str(TESTS)])
-        self.assertEqual(code, 0, out)
-
-    def test_mouth(self):
-        code, out = build_and_run('mouth', CASES['mouth'], extra=['-lm'])
         self.assertEqual(code, 0, out)
 
     def test_gesture(self):

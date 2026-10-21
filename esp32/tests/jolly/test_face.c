@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "jolly/jolly_face_spec.h"
 
@@ -117,8 +118,23 @@ static void mouth_lines(void)
     assert(jolly_face_mouth_line(JFM_PILL, xy, JOLLY_MOUTH_POINTS) == 0);   /* not a line */
 }
 
+static void names(void)
+{
+    static const char *const N[JM_COUNT] = {
+        "tranquilo", "escuchando", "pensando", "hablando", "feliz", "carino", "durmiendo", "espia",
+        "alerta", "desconectado", "mareado", "asustado", "aliviado", "enojado", "sorprendido", "guino",
+    };
+    for (int i = 0; i < JM_COUNT; i++) {
+        assert(!strcmp(jolly_face_name((jolly_mood_t)i), N[i]));
+        assert(jolly_face_named(N[i]) == (jolly_mood_t)i);
+    }
+    assert(jolly_face_named("nope") == JM_COUNT && jolly_face_named("") == JM_COUNT);
+    assert(!strcmp(jolly_face_name(JM_COUNT), "tranquilo"));
+}
+
 int main(void)
 {
+    names();
     table();
     visemes();
     motion();
