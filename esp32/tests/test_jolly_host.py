@@ -21,6 +21,7 @@ CASES = {
     'glance': ['jolly/jolly_glance.c'],
     'text': ['jolly/jolly_text.c'],
     'mouth': ['jolly/jolly_mouth.c'],
+    'gesture': ['jolly/jolly_gesture.c'],
 }
 JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
@@ -92,6 +93,10 @@ class JollyHost(unittest.TestCase):
 
     def test_mouth(self):
         code, out = build_and_run('mouth', CASES['mouth'], extra=['-lm'])
+        self.assertEqual(code, 0, out)
+
+    def test_gesture(self):
+        code, out = build_and_run('gesture', CASES['gesture'])
         self.assertEqual(code, 0, out)
 
     def test_mood(self):

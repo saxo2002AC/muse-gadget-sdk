@@ -35,8 +35,12 @@ extern "C" {
  */
 
 /* Creates the eyes centred in `parent`, `y` px below its centre. A tap on
- * them calls on_pet (may be NULL) after its heart. */
-void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void));
+ * them calls on_pet after its heart; a hold (jolly_gesture.h) calls
+ * on_hold(true), and on_hold(false) when it ends. Either may be NULL. */
+void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (*on_hold)(bool down));
+
+/* A finger is holding Jolly's face (push-to-talk). */
+bool jolly_eyes_holding(void);
 
 /* The mood to show: applied behind the next blink, or now for moods that
  * don't blink. */

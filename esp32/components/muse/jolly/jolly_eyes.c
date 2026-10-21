@@ -15,6 +15,7 @@
  */
 
 #include "jolly/jolly_eyes.h"
+#include "jolly/jolly_gesture.h"
 #include "jolly/jolly_mouth.h"
 
 #include <math.h>
@@ -89,6 +90,8 @@ static struct {
 } s_m = { .kind = -1 };
 static float s_level;              /* the reply's level, 0..1, for the talking mouth */
 static void (*s_on_pet)(void);
+static void (*s_on_hold)(bool down);
+static jolly_gesture_t s_gesture;
 
 static jolly_mood_t s_mood = JM_TRANQUILO, s_pending = JM_TRANQUILO;
 static uint32_t s_color_from, s_color_to;
@@ -147,29 +150,64 @@ static lv_obj_t *plain(lv_obj_t *parent)
     return o;
 }
 
+/* Every touch on the face goes through the gesture classifier: a tap pets,
+ * a hold talks, a swipe is the tileview's. */
 static void on_box_event(lv_event_t *e)
 {
-    (void)e;
-    lv_point_t p;
+    lv_event_code_t code = lv_event_get_code(e);
+    jolly_gesture_sample_t s = code == LV_EVENT_RELEASED ? JGS_RELEASED
+                             : code == LV_EVENT_PRESS_LOST ? JGS_LOST
+                                                           : JGS_PRESSED;
+    lv_point_t p = { 0, 0 };
     lv_area_t a;
-    lv_indev_get_point(lv_indev_active(), &p);
+    lv_indev_t *indev = lv_indev_active();
+    if (indev) {
+        lv_indev_get_point(indev, &p);
+    }
     lv_obj_get_coords(s_box, &a);
-    jolly_eyes_pet(p.x - a.x1, p.y - a.y1);
-    if (s_on_pet) {
-        s_on_pet();
+    switch (jolly_gesture_feed(&s_gesture, s, p.x - a.x1, p.y - a.y1, (int64_t)lv_tick_get())) {
+    case JG_TAP:
+        jolly_eyes_pet(s_gesture.x0, s_gesture.y0);
+        if (s_on_pet) {
+            s_on_pet();
+        }
+        break;
+    case JG_HOLD_START:
+        if (s_on_hold) {
+            s_on_hold(true);
+        }
+        break;
+    case JG_HOLD_END:
+        if (s_on_hold) {
+            s_on_hold(false);
+        }
+        break;
+    default:
+        break;
     }
 }
 
-void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void))
+bool jolly_eyes_holding(void)
+{
+    return jolly_gesture_holding(&s_gesture);
+}
+
+void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (*on_hold)(bool down))
 {
     s_on_pet = on_pet;
+    s_on_hold = on_hold;
+    jolly_gesture_reset(&s_gesture);
     make_heart();
     s_box = lv_obj_create(parent);
     lv_obj_remove_style_all(s_box);
     lv_obj_set_size(s_box, BOX_W, BOX_H);
     lv_obj_remove_flag(s_box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(s_box, on_box_event, LV_EVENT_PRESSED, NULL);
+    static const lv_event_code_t TOUCH[] = { LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED,
+                                             LV_EVENT_PRESS_LOST };
+    for (size_t i = 0; i < sizeof(TOUCH) / sizeof(TOUCH[0]); i++) {
+        lv_obj_add_event_cb(s_box, on_box_event, TOUCH[i], NULL);
+    }
     lv_obj_align(s_box, LV_ALIGN_CENTER, 0, y);
     for (int i = 0; i < 2; i++) {
         eye_t *e = &s_eye[i];

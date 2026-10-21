@@ -544,6 +544,12 @@ static void on_jolly_pet(void)
     s_pet_until_ms = jolly_mood_pet_until(esp_timer_get_time() / 1000);
 }
 
+/* A hold on Jolly's face is the talk key, as BOOT (muse_input's path). */
+static void on_jolly_hold(bool down)
+{
+    muse_input_touch_talk(down);
+}
+
 /* Jolly in the avatar's place: the mood from Muse's voice, a pat and the Mac
  * Mini's Guardián (jolly_client), then a frame of the eyes. */
 static void jolly_tick(muse_mode_t mode, float voice_level)
@@ -556,6 +562,9 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         /* A crit that clears: feliz for a moment. */
         s_feliz_until_ms = jolly_mood_feliz_until(s_prev_level, level, now, s_feliz_until_ms);
         s_prev_level = level;
+    }
+    if (jolly_eyes_holding() && mode != MUSE_MODE_THINKING && mode != MUSE_MODE_SPEAKING) {
+        mode = MUSE_MODE_LISTENING;   /* held: Jolly listens, whatever Muse is doing yet */
     }
     jolly_mood_in_t in = {
         .voice = mode, .link = link.link, .level = level, .sec_level = have ? s_glance.sec.level : JLV_OK,
@@ -1063,7 +1072,7 @@ static void build_screen(void)
      * still move it, but hidden and never drawn (frame_tick). */
     lv_obj_add_flag(s_canvas, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
-    jolly_eyes_create(face, s_big_y, on_jolly_pet);
+    jolly_eyes_create(face, s_big_y, on_jolly_pet, on_jolly_hold);
     jolly_pages_face(face);
 #endif
     if (s_ring) {
