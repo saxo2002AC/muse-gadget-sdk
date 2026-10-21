@@ -163,6 +163,7 @@ void jolly_motion_mood_init(jolly_motion_mood_t *s)
 {
     s->mood = JM_TRANQUILO;
     s->until = 0;
+    s->startled_until = 0;
     s->face_down = false;
 }
 
@@ -171,7 +172,8 @@ void jolly_motion_mood_on(jolly_motion_mood_t *s, jolly_motion_ev_t ev, int64_t 
     switch (ev) {
     case JME_SHAKE:
         s->mood = JM_MAREADO;
-        s->until = now + JOLLY_MAREADO_MS;
+        s->startled_until = now + JOLLY_SORPRENDIDO_SHAKE_MS;
+        s->until = s->startled_until + JOLLY_MAREADO_MS;
         break;
     case JME_FREEFALL:
         s->mood = JM_ASUSTADO;
@@ -199,7 +201,7 @@ void jolly_motion_mood_on(jolly_motion_mood_t *s, jolly_motion_ev_t ev, int64_t 
 jolly_mood_t jolly_motion_mood_now(const jolly_motion_mood_t *s, int64_t now)
 {
     if (s->mood != JM_TRANQUILO && now < s->until) {
-        return s->mood;
+        return s->mood == JM_MAREADO && now < s->startled_until ? JM_SORPRENDIDO : s->mood;
     }
     return s->face_down ? JM_DURMIENDO : JM_TRANQUILO;
 }

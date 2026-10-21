@@ -542,7 +542,7 @@ static void on_canvas_clicked(lv_event_t *e)
 }
 
 #if CONFIG_MUSE_JOLLY
-static int64_t s_pet_until_ms, s_feliz_until_ms;
+static int64_t s_pet_until_ms, s_feliz_until_ms, s_surprise_until_ms, s_wink_until_ms;
 static jolly_level_t s_prev_level = JLV_OK;
 static jolly_glance_t s_glance;   /* the latest, copied each frame: not on the LVGL task's stack */
 
@@ -568,8 +568,11 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
     bool have = jolly_client_snapshot(&s_glance, &link);
     jolly_level_t level = have ? s_glance.level : JLV_OK;
     if (have && link.link == JL_OK) {
-        /* A crit that clears: feliz for a moment. */
+        /* A crit that clears: feliz for a moment; a warning that clears, a
+         * wink; a level that worsens, a start (face v5). */
         s_feliz_until_ms = jolly_mood_feliz_until(s_prev_level, level, now, s_feliz_until_ms);
+        s_wink_until_ms = jolly_mood_wink_until(s_prev_level, level, now, s_wink_until_ms);
+        s_surprise_until_ms = jolly_mood_surprise_until(s_prev_level, level, now, s_surprise_until_ms);
         s_prev_level = level;
     }
     if (jolly_eyes_holding() && mode != MUSE_MODE_THINKING && mode != MUSE_MODE_SPEAKING) {
@@ -579,6 +582,7 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         .voice = mode, .link = link.link, .level = level, .sec_level = have ? s_glance.sec.level : JLV_OK,
         .quiet = have && s_glance.quiet, .now_ms = now, .pet_until_ms = s_pet_until_ms,
         .feliz_until_ms = s_feliz_until_ms, .motion = jolly_imu_mood(now),
+        .surprise_until_ms = s_surprise_until_ms, .wink_until_ms = s_wink_until_ms,
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
     jolly_eyes_tick(now, voice_level);   /* the reply's level moves the talking mouth */

@@ -120,8 +120,10 @@ static void moods(void)
     jolly_motion_mood_init(&s);
     assert(jolly_motion_mood_now(&s, 0) == JM_TRANQUILO);   /* none */
     jolly_motion_mood_on(&s, JME_SHAKE, 1000);
-    assert(jolly_motion_mood_now(&s, 1000) == JM_MAREADO);
-    assert(jolly_motion_mood_now(&s, 1000 + JOLLY_MAREADO_MS) == JM_TRANQUILO);
+    assert(jolly_motion_mood_now(&s, 1000) == JM_SORPRENDIDO);   /* face v5: startled first */
+    assert(jolly_motion_mood_now(&s, 1000 + JOLLY_SORPRENDIDO_SHAKE_MS) == JM_MAREADO);
+    assert(jolly_motion_mood_now(&s, 1000 + JOLLY_SORPRENDIDO_SHAKE_MS + JOLLY_MAREADO_MS - 1) == JM_MAREADO);
+    assert(jolly_motion_mood_now(&s, 1000 + JOLLY_SORPRENDIDO_SHAKE_MS + JOLLY_MAREADO_MS) == JM_TRANQUILO);
     jolly_motion_mood_on(&s, JME_FREEFALL, 5000);
     assert(jolly_motion_mood_now(&s, 5100) == JM_ASUSTADO);
     jolly_motion_mood_on(&s, JME_LAND, 5300);

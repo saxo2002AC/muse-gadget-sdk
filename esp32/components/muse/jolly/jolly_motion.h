@@ -30,7 +30,7 @@ extern "C" {
  * milli-g (jolly_imu.c feeds it the MPU-6050's), and the moods that asks for.
  * Pure, so tests/jolly/test_motion.c checks it on synthetic motion.
  *
- *   shake      the acceleration's spread over 450 mg for 400 ms -> mareado
+ *   shake      the acceleration's spread over 450 mg for 400 ms -> sorprendido, mareado
  *   freefall   |a| under 300 mg for 120 ms                    -> asustado
  *   landing    an impact over 2 g within 1.5 s of a freefall  -> aliviado
  *   knock      a spike over 2.5 g lasting 30 ms or less, idle
@@ -58,7 +58,8 @@ void jolly_motion_init(jolly_motion_t *m);
 jolly_motion_ev_t jolly_motion_feed(jolly_motion_t *m, int16_t ax_mg, int16_t ay_mg, int16_t az_mg, int64_t now_ms,
                                     bool knock_gate);
 
-#define JOLLY_MAREADO_MS 3000
+#define JOLLY_SORPRENDIDO_SHAKE_MS 1000   /* a shake startles first (face v5)... */
+#define JOLLY_MAREADO_MS 3000            /* ...then leaves Jolly dizzy */
 #define JOLLY_ASUSTADO_MS 1500     /* at most: the landing ends it */
 #define JOLLY_ALIVIADO_MS 2500
 #define JOLLY_ENOJADO_MS 2000
@@ -66,6 +67,7 @@ jolly_motion_ev_t jolly_motion_feed(jolly_motion_t *m, int16_t ax_mg, int16_t ay
 typedef struct {
     jolly_mood_t mood;             /* the passing one */
     int64_t until;
+    int64_t startled_until;        /* a shake's sorprendido, before its mareado */
     bool face_down;                /* under it: durmiendo */
 } jolly_motion_mood_t;
 

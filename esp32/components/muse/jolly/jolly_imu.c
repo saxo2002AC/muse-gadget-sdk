@@ -166,7 +166,7 @@ bool jolly_imu_console_command(const char *line)
     }
     static const char *const MOODS[JM_COUNT] = {
         "tranquilo", "escuchando", "pensando", "hablando", "feliz", "carino", "durmiendo", "espia",
-        "alerta", "desconectado", "mareado", "asustado", "aliviado", "enojado",
+        "alerta", "desconectado", "mareado", "asustado", "aliviado", "enojado", "sorprendido", "guino",
     };
     int16_t mg[3];
     taskENTER_CRITICAL(&s_mux);

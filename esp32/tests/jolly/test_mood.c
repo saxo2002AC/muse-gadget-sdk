@@ -48,6 +48,50 @@ static void each_rule(void)
     in = base();
     in.quiet = true;
     assert(jolly_mood_pick(&in) == JM_DURMIENDO);
+    in = base();
+    in.surprise_until_ms = in.now_ms + 1;
+    assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);
+    in = base();
+    in.wink_until_ms = in.now_ms + 1;
+    assert(jolly_mood_pick(&in) == JM_GUINO);
+}
+
+/* Face v5's news moods: sorprendido when the level worsens, guiño when a
+ * warning clears; security first, then surprise, espía, guiño, feliz. */
+static void news(void)
+{
+    jolly_mood_in_t in = base();
+    in.surprise_until_ms = in.now_ms + 1000;
+    in.level = JLV_CRIT;
+    assert(jolly_mood_pick(&in) == JM_ALERTA);          /* crit beats surprise */
+    in.level = JLV_WARN;
+    in.sec_level = JLV_WARN;
+    assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);     /* surprise beats espía */
+    in = base();
+    in.wink_until_ms = in.now_ms + 1000;
+    in.sec_level = JLV_WARN;
+    assert(jolly_mood_pick(&in) == JM_ESPIA);           /* espía beats guiño */
+    in.sec_level = JLV_OK;
+    in.feliz_until_ms = in.now_ms + 1000;
+    in.quiet = true;
+    assert(jolly_mood_pick(&in) == JM_GUINO);           /* guiño beats feliz and quiet */
+    in.wink_until_ms = in.now_ms;
+    assert(jolly_mood_pick(&in) == JM_FELIZ);
+    in = base();
+    in.surprise_until_ms = in.now_ms + 1000;
+    in.voice = MUSE_MODE_SPEAKING;
+    assert(jolly_mood_pick(&in) == JM_HABLANDO);
+    in.voice = MUSE_MODE_IDLE;
+    in.link = JL_STALE;
+    assert(jolly_mood_pick(&in) == JM_DESCONECTADO);
+
+    assert(jolly_mood_surprise_until(JLV_OK, JLV_WARN, 5000, 0) == 5000 + JOLLY_SORPRENDIDO_MS);
+    assert(jolly_mood_surprise_until(JLV_WARN, JLV_CRIT, 5000, 0) == 5000 + JOLLY_SORPRENDIDO_MS);
+    assert(jolly_mood_surprise_until(JLV_WARN, JLV_WARN, 5000, 7) == 7);
+    assert(jolly_mood_surprise_until(JLV_CRIT, JLV_OK, 5000, 7) == 7);
+    assert(jolly_mood_wink_until(JLV_WARN, JLV_OK, 5000, 0) == 5000 + JOLLY_GUINO_MS);
+    assert(jolly_mood_wink_until(JLV_CRIT, JLV_OK, 5000, 0) == 0);   /* that's feliz */
+    assert(jolly_mood_wink_until(JLV_OK, JLV_OK, 5000, 9) == 9);
 }
 
 static void precedence(void)
@@ -109,5 +153,6 @@ int main(void)
     each_rule();
     precedence();
     timers();
+    news();
     return 0;
 }
