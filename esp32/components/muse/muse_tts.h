@@ -39,7 +39,9 @@ extern "C" {
  *   401/403/413/500: a JSON error
  *
  * The URL and key live in NVS, set on the serial console only (never over
- * BLE): ">tts_url=http://192.168.0.11:3050" answers "@tts_url ok", and
+ * BLE): ">tts_url=http://Mac-mini-de-acserver.local:3024" (or an IPv4 address;
+ * http://host:port only, muse_url.h; a .local name is found by mDNS and asked
+ * again after a failed connect, muse_resolve.h) answers "@tts_url ok", and
  * ">tts_key=..." answers "@tts_key ok". An empty value clears either, and
  * ">tts" prints "@tts {...}" with the URL and the key's length. The key is
  * never logged or printed. CONFIG_MUSE_TTS_URL and CONFIG_MUSE_TTS_KEY are

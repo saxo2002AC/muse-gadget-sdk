@@ -15,6 +15,7 @@ TESTS = ROOT / 'tests/jolly'
 # Each test and the production sources it links.
 CASES = {
     'orient': ['boards/es3c40p_orient.c'],
+    'url': ['muse_url.c'],
 }
 
 
@@ -34,6 +35,10 @@ def build_and_run(name, sources):
 class JollyHost(unittest.TestCase):
     def test_orient(self):
         code, out = build_and_run('orient', CASES['orient'])
+        self.assertEqual(code, 0, out)
+
+    def test_url(self):
+        code, out = build_and_run('url', CASES['url'])
         self.assertEqual(code, 0, out)
 
 

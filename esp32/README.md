@@ -274,7 +274,8 @@ things you can change:
   is the spot: it has the reply text, and the MP3 decoder, speaker and volume
   are already wired up there. A server on your own network that streams raw
   16 kHz PCM works without code: set it on the serial console with
-  `>tts_url=http://host:port` and `>tts_key=...` (empty clears; `>tts` shows
+  `>tts_url=http://host:port` (an IPv4 address or a `name.local` host, found
+  by mDNS) and `>tts_key=...` (empty clears; `>tts` shows
   them), as described in
   [`components/muse/muse_tts.h`](components/muse/muse_tts.h). Replies stay text
   whenever it can't be reached.

@@ -35,11 +35,13 @@
 #include "sdkconfig.h"
 
 #include "muse_mem.h"
+#include "muse_resolve.h"
+#include "muse_url.h"
 
 static const char *TAG = "muse_tts";
 
 #define NVS_NS "muse_tts"
-#define URL_MAX 160                 /* "http://host:port", and a path if it has one */
+#define URL_MAX 96                  /* "http://host:port" (muse_url.h) */
 #define KEY_MAX 128
 #define BODY_MAX 4000               /* the server's limit */
 #define RATE 16000
@@ -150,18 +152,12 @@ bool muse_tts_configured(void)
     return set;
 }
 
-/* An http:// URL without spaces or quotes, which go into the status JSON. */
+/* http://host:port only, the host an IPv4 address or a .local name (muse_url.h):
+ * nothing that could reach the status JSON or a header unescaped. */
 static bool url_ok(const char *v)
 {
-    if (strncmp(v, "http://", 7) != 0 || strlen(v) >= URL_MAX || !v[7]) {
-        return false;
-    }
-    for (const char *p = v; *p; p++) {
-        if (*p <= ' ' || *p == '"' || *p == '\\' || *p == 0x7f) {
-            return false;
-        }
-    }
-    return true;
+    muse_url_t u;
+    return strlen(v) < URL_MAX && muse_url_parse(v, &u);
 }
 
 static void answer(const char *what, const char *err)
@@ -179,7 +175,7 @@ bool muse_tts_console_command(const char *line)
     if (!strncmp(line, "tts_url=", 8)) {
         const char *v = line + 8;
         if (v[0] && !url_ok(v)) {
-            answer("tts_url", "invalid (want http://host:port)");
+            answer("tts_url", "invalid (want http://IPv4:port or http://name.local:port)");
             return true;
         }
         lock();
@@ -368,19 +364,25 @@ static bool fetch(void)
     if (atomic_load(&s_cancel)) {
         return false;   /* cancelled before it started */
     }
-    char url[URL_MAX + 8];
+    char saved[URL_MAX];
     char key[KEY_MAX];
     lock();
-    strlcpy(url, s_url, sizeof(url));
+    strlcpy(saved, s_url, sizeof(saved));
     strlcpy(key, s_key, sizeof(key));
     unlock();
-    size_t ul = strlen(url);
-    while (ul > 7 && url[ul - 1] == '/') {
-        url[--ul] = '\0';
+    muse_url_t server;
+    char ip[16];
+    if (!muse_url_parse(saved, &server)) {
+        ESP_LOGW(TAG, "the TTS URL isn't http://host:port; set it again with >tts_url=");
+        memset(key, 0, sizeof(key));
+        return false;
     }
-    if (ul < 4 || strcmp(url + ul - 4, "/tts") != 0) {
-        strlcat(url, "/tts", sizeof(url));
+    if (!muse_resolve(&server, ip)) {
+        memset(key, 0, sizeof(key));
+        return false;   /* muse_resolve logged it */
     }
+    char url[48];
+    snprintf(url, sizeof(url), "http://%s:%d/tts", ip, server.port);
 
     int64_t t0 = esp_timer_get_time();
     s_content_type[0] = '\0';
@@ -406,7 +408,8 @@ static bool fetch(void)
     memset(key, 0, sizeof(key));
     esp_err_t err = esp_http_client_open(c, (int)s_text_len);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "can't reach %s: %s", url, esp_err_to_name(err));
+        ESP_LOGW(TAG, "can't reach %s (%s): %s", server.host, ip, esp_err_to_name(err));
+        muse_resolve_forget(&server);   /* a .local server may have a new address */
         goto done;
     }
     if (atomic_load(&s_cancel)) {
@@ -422,9 +425,16 @@ static bool fetch(void)
     }
     int status = esp_http_client_get_status_code(c);
     if (status != 200) {
-        char body[128];
+        /* At most 64 bytes of the error, printable ASCII only. */
+        char body[65];
         int n = esp_http_client_read(c, body, sizeof(body) - 1);
-        body[n > 0 ? n : 0] = '\0';
+        n = n > 0 ? n : 0;
+        for (int i = 0; i < n; i++) {
+            if (body[i] < 0x20 || body[i] > 0x7e) {
+                body[i] = '.';
+            }
+        }
+        body[n] = '\0';
         ESP_LOGW(TAG, "%s answered %d: %s", url, status, body);
         goto done;
     }
