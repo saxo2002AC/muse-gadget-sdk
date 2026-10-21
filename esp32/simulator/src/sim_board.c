@@ -20,9 +20,13 @@
 #include "src/drivers/sdl/lv_sdl_mouse.h"
 #include "src/drivers/sdl/lv_sdl_window.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 #define WATCHER_RESOLUTION 412
 
 static lv_display_t *s_display;
+static const muse_board_t *s_selected;   /* sim_board_get(): the Watcher, or MUSE_SIM_BOARD's */
 
 /* muse_ui.c reads the selected board through this production global. */
 const muse_board_t *muse_board;
@@ -34,7 +38,7 @@ static esp_err_t sim_init(void)
 
 static lv_display_t *sim_display_start(lv_indev_t **touch)
 {
-    s_display = lv_sdl_window_create(WATCHER_RESOLUTION, WATCHER_RESOLUTION);
+    s_display = lv_sdl_window_create(s_selected->width, s_selected->height);
     if (!s_display) {
         return NULL;
     }
@@ -94,9 +98,43 @@ static const muse_board_t s_sim_board = {
     .power_off = sim_power_off,
 };
 
+/* Its audio only has to exist: the UI shows the mic and speaker for a board
+ * that has some. The simulator never opens it. */
+static esp_err_t sim_audio_init(esp_codec_dev_handle_t *spk, esp_codec_dev_handle_t *mic)
+{
+    (void)spk;
+    (void)mic;
+    return ESP_FAIL;
+}
+
+/* MUSE_SIM_BOARD=es3c40p: the LCDWIKI ES3C40P's UI, landscape 480x320
+ * (components/muse/boards/board_es3c40p.c, orientation 0). */
+static const muse_board_t s_es3c40p_board = {
+    .name = "LCDWIKI ES3C40P Simulator",
+    .width = 480,
+    .height = 320,
+    .round = false,
+    .touch = true,
+    .diagonal_in = 4.0f,
+    .talk_button = "boot",
+    .talk_hint = { LV_ALIGN_BOTTOM_RIGHT, -8, -8 },
+    .screen_talk_px = 72,
+    .frame_ms = 40,
+    .init = sim_init,
+    .display_start = sim_display_start,
+    .display_lock = sim_display_lock,
+    .display_unlock = sim_display_unlock,
+    .set_brightness = sim_set_brightness,
+    .panel_sleep = sim_panel_sleep,
+    .audio_init = sim_audio_init,
+    .power_off = sim_power_off,
+};
+
 const muse_board_t *sim_board_get(void)
 {
-    return &s_sim_board;
+    const char *which = getenv("MUSE_SIM_BOARD");
+    s_selected = which && !strcmp(which, "es3c40p") ? &s_es3c40p_board : &s_sim_board;
+    return s_selected;
 }
 
 lv_display_t *sim_board_display(void)

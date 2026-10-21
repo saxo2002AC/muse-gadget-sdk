@@ -69,6 +69,8 @@ typedef struct {
     bool touch;             /* no touch: no settings screen, set up over BLE */
     float diagonal_in;      /* screen size; under 2" typing uses a keypad with bigger keys */
     bool touch_talk;        /* on-screen mic supplies talk edges; no physical talk button */
+    bool (*console)(const char *line);   /* optional: the board's own serial console lines (no '>');
+                                          * false if not its own. Serial only, never BLE */
     int screen_talk_px;     /* a round talk button this big at the bottom of the full layout, held as the
                              * talk key (touch, rectangular panels); 0 for none */
     bool keyboard;          /* dedicated menu navigation keys */

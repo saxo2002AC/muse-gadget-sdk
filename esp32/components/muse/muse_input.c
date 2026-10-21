@@ -709,6 +709,9 @@ static bool console_command(char *line, bool whole)
         return true;
     }
 #endif
+    if (whole && muse_board->console && muse_board->console(line)) {
+        return true;
+    }
     /* A secret's line no handler took (a typo, no '=', too long to read
      * whole) stops here: the setup commands below would log it. */
     if (muse_secret_console_only(line)) {

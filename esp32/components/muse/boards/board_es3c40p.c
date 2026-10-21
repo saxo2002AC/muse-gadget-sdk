@@ -55,15 +55,22 @@
 #include "esp_sleep.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "muse_audio.h"
 #include "muse_board.h"
 #include "muse_mem.h"
+#include "es3c40p_orient.h"
 
 static const char *TAG = "board";
 
-#define LCD_H_RES 320
-#define LCD_V_RES 480
+/* The view LVGL draws: the 320x480 panel turned to landscape through MADCTL
+ * (es3c40p_orient.h). The panel keeps its native timing. */
+#define LCD_H_RES 480
+#define LCD_V_RES 320
 #define LCD_HOST SPI2_HOST
 #define LCD_SCLK GPIO_NUM_12
 #define LCD_MOSI GPIO_NUM_11
@@ -71,9 +78,12 @@ static const char *TAG = "board";
 #define LCD_DC GPIO_NUM_46
 #define LCD_RST GPIO_NUM_NC   /* LCD_RST is the board's EN; the driver sends SWRESET */
 #define LCD_BL GPIO_NUM_45    /* active high */
-/* Two DMA buffers in internal RAM, 15 KB each: the same 30 KB the FNK0104B
- * spends (240 x 32 lines), and 480 / 24 = 20 even bands. */
-#define DRAW_BUF_LINES 24
+/* Two DMA buffers in internal RAM, 15 KB each (480 x 16 lines): the same 30 KB
+ * as portrait's 320 x 24, and 320 / 16 = 20 even bands. */
+#define DRAW_BUF_LINES 16
+
+#define ORIENT_NS "jolly_grd"   /* NVS: the landscape orientation, ">lcd_orient=" */
+#define ORIENT_KEY "orient"
 
 #define I2C_SDA GPIO_NUM_16   /* shared by the FT6336U and the ES8311 */
 #define I2C_SCL GPIO_NUM_15
@@ -96,6 +106,8 @@ static const char *TAG = "board";
 static i2c_master_bus_handle_t s_i2c;
 static i2c_master_dev_handle_t s_touch_dev;
 static esp_lcd_panel_handle_t s_panel;
+static volatile int s_orient;        /* es3c40p_orient.h: 0 or 1 */
+static volatile bool s_touch_log;    /* ">lcd_touchlog=1": log each press, raw and mapped */
 static esp_lcd_panel_io_handle_t s_io;
 static muse_gpio_button_t s_talk;
 static adc_oneshot_unit_handle_t s_adc;
@@ -143,23 +155,73 @@ static esp_err_t touch_read_regs(uint8_t reg, uint8_t *buf, size_t n)
     return i2c_master_transmit_receive(s_touch_dev, &reg, 1, buf, n, 50);
 }
 
+static bool s_touch_down;   /* for the touch log: one line per press */
+
+static void touch_released(void)
+{
+    s_touch_down = false;
+}
+
 static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
     (void)indev;
     uint8_t count = 0;
     data->state = LV_INDEV_STATE_RELEASED;
     if (touch_read_regs(TOUCH_REG_TD_STATUS, &count, 1) != ESP_OK || (count & 0x0F) == 0) {
+        touch_released();
         return;
     }
     uint8_t p[4];
     if (touch_read_regs(TOUCH_REG_P1, p, sizeof(p)) != ESP_OK) {
         return;
     }
-    int x = ((p[0] & 0x0F) << 8) | p[1];
-    int y = ((p[2] & 0x0F) << 8) | p[3];
-    data->point.x = x < LCD_H_RES ? x : LCD_H_RES - 1;
-    data->point.y = y < LCD_V_RES ? y : LCD_V_RES - 1;
+    int rx = ((p[0] & 0x0F) << 8) | p[1];
+    int ry = ((p[2] & 0x0F) << 8) | p[3];
+    int x, y;
+    es3c40p_map_touch(rx, ry, s_orient, &x, &y);   /* the FT6336U reports portrait */
+    if (s_touch_log && !s_touch_down) {
+        ESP_LOGI(TAG, "touch raw %d,%d -> %d,%d (orient %d)", rx, ry, x, y, s_orient);
+    }
+    s_touch_down = true;
+    data->point.x = x;
+    data->point.y = y;
     data->state = LV_INDEV_STATE_PRESSED;
+    return;
+}
+
+static muse_board_t s_board;   /* below; display_start() places its talk hint */
+
+static int load_orient(void)
+{
+    nvs_handle_t h;
+    uint8_t v = 0;
+    if (nvs_open(ORIENT_NS, NVS_READONLY, &h) == ESP_OK) {
+        if (nvs_get_u8(h, ORIENT_KEY, &v) != ESP_OK || v >= ES3C40P_ORIENTS) {
+            v = 0;
+        }
+        nvs_close(h);
+    }
+    return v;
+}
+
+static esp_err_t save_orient(int orient)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(ORIENT_NS, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        err = nvs_set_u8(h, ORIENT_KEY, (uint8_t)orient);
+        if (err == ESP_OK) {
+            err = nvs_commit(h);
+        }
+        nvs_close(h);
+    }
+    return err;
+}
+
+static void apply_madctl(es3c40p_madctl_t m)
+{
+    esp_lcd_panel_swap_xy(s_panel, m.swap_xy);
+    esp_lcd_panel_mirror(s_panel, m.mirror_x, m.mirror_y);
 }
 
 static lv_display_t *display_start(lv_indev_t **touch)
@@ -220,12 +282,15 @@ static lv_display_t *display_start(lv_indev_t **touch)
     esp_lcd_panel_reset(s_panel);
     esp_lcd_panel_init(s_panel);
     esp_lcd_panel_invert_color(s_panel, true);   /* IPS panel: LovyanGFX invert = true */
-    /* With MADCTL MX clear the image came out mirrored left to right (seen on
-     * the board), as on the FNK0104B. Mirroring happens in the panel's address
-     * mapping, below LVGL, so LVGL's x stays the visible x and the FT6336U's
-     * raw x, which already matched the visible image under LovyanGFX, needs
-     * no flip. */
-    esp_lcd_panel_mirror(s_panel, true, false);
+    /* Landscape: MADCTL swaps and mirrors the panel's addressing below LVGL
+     * (es3c40p_madctl), and the touch is turned to match (es3c40p_map_touch). */
+    s_orient = load_orient();
+    apply_madctl(es3c40p_madctl(s_orient));
+    if (s_orient == 1) {
+        /* BOOT, at the portrait's lower left, is now at the top left. The UI
+         * places the hint once, so a live change moves it at the next start. */
+        s_board.talk_hint = (muse_button_hint_t){ LV_ALIGN_TOP_LEFT, 8, 8 };
+    }
     esp_lcd_panel_disp_on_off(s_panel, true);
 
     esp_lv_adapter_config_t adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG();
@@ -376,15 +441,96 @@ static esp_err_t power_off(void)
     return ESP_FAIL;
 }
 
-static const muse_board_t s_board = {
+/* Live: under LVGL's lock, so no flush is mid-way, then the whole screen redrawn. */
+static bool apply_live(es3c40p_madctl_t m)
+{
+    if (!s_panel || esp_lv_adapter_lock(1000) != ESP_OK) {
+        return false;
+    }
+    apply_madctl(m);
+    lv_obj_invalidate(lv_screen_active());
+    esp_lv_adapter_unlock();
+    return true;
+}
+
+static bool parse_bit(const char *s, char **end, bool *out)
+{
+    long v = strtol(s, end, 10);
+    if (*end == s || (v != 0 && v != 1)) {
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
+/*
+ * Bench commands for finding the upright landscape in one flash:
+ *   lcd                 the orientation and MADCTL in use
+ *   lcd_orient=0|1      sets it, saves it and applies it now (touch too)
+ *   lcd_madctl=S,X,Y    applies swap/mirror_x/mirror_y now, unsaved; touch unchanged
+ *   lcd_touchlog=0|1    logs each press, raw and mapped
+ * A line starting "lcd_" that isn't one of these is refused (muse_secret.h).
+ */
+static bool board_console(const char *line)
+{
+    if (!strcmp(line, "lcd")) {
+        es3c40p_madctl_t m = es3c40p_madctl(s_orient);
+        printf("@lcd orient %d swap %d mirror_x %d mirror_y %d\n", s_orient, m.swap_xy, m.mirror_x, m.mirror_y);
+        fflush(stdout);
+        return true;
+    }
+    if (!strncmp(line, "lcd_orient=", 11)) {
+        char *end;
+        long v = strtol(line + 11, &end, 10);
+        if (end == line + 11 || *end || v < 0 || v >= ES3C40P_ORIENTS) {
+            printf("@lcd_orient error want 0 or 1\n");
+        } else {
+            s_orient = (int)v;
+            es3c40p_madctl_t m = es3c40p_madctl(s_orient);
+            bool live = apply_live(m);
+            esp_err_t err = save_orient(s_orient);
+            ESP_LOGI(TAG, "orientation %d (swap %d mirror %d,%d)%s%s", s_orient, m.swap_xy, m.mirror_x, m.mirror_y,
+                     live ? "" : ", applies at restart", err == ESP_OK ? "" : ", not saved");
+            printf("@lcd_orient %s %d\n", err == ESP_OK ? "ok" : "error storage", s_orient);
+        }
+        fflush(stdout);
+        return true;
+    }
+    if (!strncmp(line, "lcd_madctl=", 11)) {
+        es3c40p_madctl_t m;
+        char *p = (char *)line + 11, *end;
+        bool ok = parse_bit(p, &end, &m.swap_xy) && *end == ',' && parse_bit(end + 1, &end, &m.mirror_x) &&
+                  *end == ',' && parse_bit(end + 1, &end, &m.mirror_y) && !*end;
+        if (!ok) {
+            printf("@lcd_madctl error want S,X,Y as 0 or 1\n");
+        } else if (apply_live(m)) {
+            ESP_LOGI(TAG, "MADCTL swap %d mirror %d,%d (bench, not saved)", m.swap_xy, m.mirror_x, m.mirror_y);
+            printf("@lcd_madctl ok %d,%d,%d\n", m.swap_xy, m.mirror_x, m.mirror_y);
+        } else {
+            printf("@lcd_madctl error display busy\n");
+        }
+        fflush(stdout);
+        return true;
+    }
+    if (!strcmp(line, "lcd_touchlog=0") || !strcmp(line, "lcd_touchlog=1")) {
+        s_touch_log = line[13] == '1';
+        printf("@lcd_touchlog ok %d\n", s_touch_log);
+        fflush(stdout);
+        return true;
+    }
+    return false;
+}
+
+static muse_board_t s_board = {
     .name = "LCDWIKI ES3C40P",
     .width = LCD_H_RES,
     .height = LCD_V_RES,
+    .console = board_console,
     .round = false,
     .touch = true,
     .diagonal_in = 4.0f,
     .talk_button = "boot",
-    .talk_hint = { LV_ALIGN_BOTTOM_LEFT, 8, -8 },   /* BOOT, lower left with the UI upright */
+    .talk_hint = { LV_ALIGN_BOTTOM_RIGHT, -8, -8 },   /* BOOT, for orientation 0; init() moves it for 1 */
     .screen_talk_px = 72,   /* BOOT is on the edge: a talk button on the screen too */
     .frame_ms = 40,
     .init = init,
