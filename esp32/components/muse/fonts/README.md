@@ -12,7 +12,7 @@ SIL Open Font License, version 1.1 (https://openfontlicense.org), and under
 the GNU GPL version 2 or later with the GNU font embedding exception. This
 file is a conversion of an unaltered subset of the font.
 
-`jolly_font_16.c`, `jolly_font_20.c`, `jolly_font_28.c` and `jolly_font_48d.c`
+`jolly_font_12.c`, `jolly_font_16.c`, `jolly_font_20.c`, `jolly_font_28.c` and `jolly_font_48d.c`
 are the Jolly screens' fonts, built in only with `CONFIG_MUSE_JOLLY`: Montserrat
 Medium (as LVGL's built-in fonts) at 4 bpp, with ASCII, Latin-1 (U+00A0 to
 U+00FF, for Spanish), the arrows U+2191 and U+2193 and the ellipsis U+2026. The

@@ -162,6 +162,12 @@ if(MUSE_SIM_JOLLY)
     target_sources(muse_simulator PRIVATE
         "${MUSE_COMPONENT_DIR}/jolly/jolly_mood.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_eyes.c"
+        "${MUSE_COMPONENT_DIR}/jolly/jolly_pages.c"
+        "${MUSE_COMPONENT_DIR}/jolly/jolly_text.c"
+        "${MUSE_COMPONENT_DIR}/fonts/jolly_font_12.c"
+        "${MUSE_COMPONENT_DIR}/fonts/jolly_font_16.c"
+        "${MUSE_COMPONENT_DIR}/fonts/jolly_font_20.c"
+        "${MUSE_COMPONENT_DIR}/fonts/jolly_font_28.c"
         src/sim_jolly.c
     )
     target_compile_definitions(muse_simulator PRIVATE CONFIG_MUSE_JOLLY=1)

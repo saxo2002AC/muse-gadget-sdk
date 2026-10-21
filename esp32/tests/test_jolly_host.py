@@ -19,6 +19,7 @@ CASES = {
     'url': ['muse_url.c'],
     'mood': ['jolly/jolly_mood.c'],
     'glance': ['jolly/jolly_glance.c'],
+    'text': ['jolly/jolly_text.c'],
 }
 JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
@@ -60,8 +61,14 @@ def font_codepoints(path):
 
 
 class JollyHost(unittest.TestCase):
+    def test_no_label_recolor(self):
+        """R16: server text never goes through LVGL's #rrggbb recolour."""
+        offenders = [str(p) for p in (MUSE / 'jolly').glob('*.c')
+                     if re.search(r'lv_label_set_recolor|LV_TEXT_FLAG_RECOLOR', p.read_text())]
+        self.assertEqual(offenders, [])
+
     def test_fonts_cover_spanish(self):
-        for size in (16, 20, 28):
+        for size in (12, 16, 20, 28):
             points = font_codepoints(FONTS / f'jolly_font_{size}.c')
             missing = [hex(c) for c in SPANISH if c not in points]
             self.assertEqual(missing, [], f'jolly_font_{size}')
@@ -84,6 +91,10 @@ class JollyHost(unittest.TestCase):
 
     def test_mood(self):
         code, out = build_and_run('mood', CASES['mood'])
+        self.assertEqual(code, 0, out)
+
+    def test_text(self):
+        code, out = build_and_run('text', CASES['text'])
         self.assertEqual(code, 0, out)
 
     def test_url(self):

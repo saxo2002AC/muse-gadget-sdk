@@ -38,6 +38,10 @@ bool muse_ui_face_active(void);
 
 /* Slide back to the face (e.g. when a talk starts). */
 void muse_ui_show_face(void);
+
+/* Shows the tileview's column `col` (0 the face), without sliding: the
+ * simulator's scenarios and bench screenshots. */
+void muse_ui_show_tile(int col);
 /* Settings sub-pages turn off the tile swipe so they can use horizontal gestures. */
 void muse_ui_set_swipe_enabled(bool enabled);
 /* Temporarily applies a brightness while a slider is dragged. */

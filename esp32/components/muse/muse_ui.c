@@ -44,7 +44,12 @@
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_eyes.h"
 #include "jolly/jolly_mood.h"
+#include "jolly/jolly_pages.h"
+#define SETTINGS_COL (1 + JOLLY_PAGES)   /* Jolly, its status pages, then Muse's settings */
+#else
+#define SETTINGS_COL 1
 #endif
+#define DOTS (SETTINGS_COL + 1)
 #include "muse_settings.h"
 #include "muse_settings_ui.h"
 #include "muse_state.h"
@@ -105,10 +110,26 @@ static lv_obj_t *s_tv;
 static volatile bool s_face_active = true;
 static lv_obj_t *s_face;
 
+static int tile_col(void);
+
 static void tile_changed_cb(lv_event_t *e)
 {
     lv_obj_t *tv = lv_event_get_target(e);
     s_face_active = (lv_tileview_get_tile_active(tv) == s_face);
+#if CONFIG_MUSE_JOLLY
+    int col = tile_col();
+    jolly_pages_show(col >= 1 && col <= JOLLY_PAGES ? col : 0);
+#endif
+}
+
+/* The tileview's column showing: 0 Jolly or Muse, then (with Jolly) its pages, then settings. */
+static int tile_col(void)
+{
+    if (!s_tv) {
+        return 0;
+    }
+    lv_obj_t *t = lv_tileview_get_tile_active(s_tv);
+    return t && s_w > 0 ? (int)(lv_obj_get_x(t) / s_w) : 0;
 }
 
 /* From any task: the face tile is the currently visible tile. */
@@ -117,7 +138,7 @@ bool muse_ui_face_active(void)
     return s_face_active;
 }
 static lv_obj_t *s_settings;
-static lv_obj_t *s_dots[2];
+static lv_obj_t *s_dots[DOTS];
 static lv_obj_t *s_wifi_icon;
 static lv_obj_t *s_ble_icon;
 static lv_obj_t *s_cover;
@@ -980,7 +1001,10 @@ static void build_screen(void)
          * shows as a different-coloured square around the character. */
         lv_obj_set_style_bg_color(s_face, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(s_face, LV_OPA_COVER, 0);
-        s_settings = lv_tileview_add_tile(s_tv, 1, 0, LV_DIR_LEFT);
+#if CONFIG_MUSE_JOLLY
+        jolly_pages_create(s_tv, 1);   /* Mac Mini, Apps, Red, Seguridad */
+#endif
+        s_settings = lv_tileview_add_tile(s_tv, SETTINGS_COL, 0, LV_DIR_LEFT);
         lv_obj_add_event_cb(s_tv, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
         face = s_face;
     }
@@ -1040,6 +1064,7 @@ static void build_screen(void)
     lv_obj_add_flag(s_canvas, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
     jolly_eyes_create(face, s_big_y, on_jolly_pet);
+    jolly_pages_face(face);
 #endif
     if (s_ring) {
         /* The canvas's black corners reach the bezel; keep the ring on top. */
@@ -1259,7 +1284,7 @@ static void build_overlays(void)
     lv_obj_t *scr = lv_screen_active();
 
     /* Page dots. */
-    for (int i = 0; i < 2 && s_tv; i++) {
+    for (int i = 0; i < DOTS && s_tv; i++) {
         lv_obj_t *d = lv_obj_create(scr);
         lv_obj_remove_style_all(d);
         lv_obj_set_size(d, 8, 8);
@@ -1267,7 +1292,7 @@ static void build_overlays(void)
         lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(d, lv_color_hex(COLOR_DOT_OFF), 0);
         lv_obj_remove_flag(d, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align(d, LV_ALIGN_BOTTOM_MID, i ? 8 : -8, -14);
+        lv_obj_align(d, LV_ALIGN_BOTTOM_MID, (2 * i - (DOTS - 1)) * 8, -14);
         s_dots[i] = d;
     }
 
@@ -1422,21 +1447,23 @@ static void update_chrome(float now)
     s_next_settings_tick = now + SETTINGS_TICK_S;
 
     if (s_tv) {
-        int page = lv_tileview_get_tile_active(s_tv) == s_settings;
+        int col = tile_col();
+        bool page = col == SETTINGS_COL;
         bool subpage = muse_settings_ui_in_subpage();
         bool swipe = !page || !subpage;
         if (swipe != lv_obj_has_flag(s_tv, LV_OBJ_FLAG_SCROLLABLE)) {
             lv_obj_set_flag(s_tv, LV_OBJ_FLAG_SCROLLABLE, swipe);
         }
-        int shown = page * 2 + subpage;
+        int shown = col * 2 + subpage;
         if (shown != s_shown_page) {
-            for (int i = 0; i < 2; i++) {
-                lv_obj_set_style_bg_color(s_dots[i], lv_color_hex(i == page ? COLOR_ACCENT : COLOR_DOT_OFF), 0);
+            for (int i = 0; i < DOTS; i++) {
+                lv_obj_set_style_bg_color(s_dots[i], lv_color_hex(i == col ? COLOR_ACCENT : COLOR_DOT_OFF), 0);
                 lv_obj_set_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN, page && subpage);
             }
             s_shown_page = shown;
         }
-        muse_settings_ui_tick(lv_obj_get_scroll_x(s_tv) > 0);
+        /* Settings is on screen, or sliding on or off it. */
+        muse_settings_ui_tick(lv_obj_get_scroll_x(s_tv) > (SETTINGS_COL - 1) * s_w);
     }
 
     /* Joining, the icon blinks: the compact layout has no state label. */
@@ -1766,6 +1793,9 @@ static void frame_tick(lv_timer_t *timer)
         return;
     }
     update_chrome(now);
+#if CONFIG_MUSE_JOLLY
+    jolly_pages_tick(esp_timer_get_time() / 1000);   /* its pages, before the face's early returns */
+#endif
     if (muse_menu_tick(now)) {
         image_hide_locked();
         return;   /* the menu covers the face */
@@ -1859,6 +1889,17 @@ esp_err_t muse_ui_start(void)
 
     ESP_LOGI(TAG, "UI up: %dx%d, %d px Muse, %d ms frames", s_w, s_h, s_canvas_px, muse_board->frame_ms);
     return ESP_OK;
+}
+
+void muse_ui_show_tile(int col)
+{
+    if (!s_tv || col < 0 || col > SETTINGS_COL) {
+        return;
+    }
+    lv_tileview_set_tile_by_index(s_tv, (uint32_t)col, 0, LV_ANIM_OFF);
+#if CONFIG_MUSE_JOLLY
+    jolly_pages_show(col >= 1 && col <= JOLLY_PAGES ? col : 0);   /* no slide, so no tile event */
+#endif
 }
 
 void muse_ui_show_face(void)

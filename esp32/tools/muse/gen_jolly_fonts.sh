@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Regenerates components/muse/fonts/jolly_font_{16,20,28,48d}.c, the Jolly
+# Regenerates components/muse/fonts/jolly_font_{12,16,20,28,48d}.c, the Jolly
 # screens' fonts (CONFIG_MUSE_JOLLY): Montserrat Medium, as LVGL's built-in
 # fonts, with Latin-1 for Spanish ("Guardián", "días", "°") plus the arrows
 # and the ellipsis; the 48 px one only digits, "%", "°", ".", "-" and space.
@@ -43,6 +43,7 @@ gen() {   # name size ranges...
     echo "wrote $OUT/$name.c"
 }
 LATIN="0x20-0x7E,0xA0-0xFF,0x2191,0x2193,0x2026"
+gen jolly_font_12 12 -r "$LATIN"
 gen jolly_font_16 16 -r "$LATIN"
 gen jolly_font_20 20 -r "$LATIN"
 gen jolly_font_28 28 -r "$LATIN"

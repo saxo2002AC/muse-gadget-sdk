@@ -68,6 +68,7 @@ static void usage(FILE *out, const char *argv0)
             "  ble=off|advertising|connected         passkey=0..999999\n"
             "  paired=true|false  link=boot|unpaired|pairing|confirm|connecting|online|offline|error\n"
             "  speaker=true|false brightness=10..100 advance=MILLISECONDS\n"
+            "  tile=N             the tileview's column N (0 the face)\n"
             "\n"
             "Interactive keys: F1..F7 select face states, H is happy, Space is\n"
             "push-to-talk, +/- change level, [/] change progress, S sleeps,\n"
@@ -296,6 +297,10 @@ static bool apply_setting(const char *key, const char *value, bool real_time)
     float scalar;
     if (!strcmp(key, "face")) {
         return set_face(value);
+    }
+    if (!strcmp(key, "tile") && parse_long(value, 0, 9, &number)) {
+        muse_ui_show_tile((int)number);
+        return true;
     }
     if (!strcmp(key, "caption")) {
         muse_state_set_caption("%s", value);
