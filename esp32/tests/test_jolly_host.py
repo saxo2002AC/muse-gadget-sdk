@@ -18,19 +18,21 @@ CASES = {
     'orient': ['boards/es3c40p_orient.c'],
     'url': ['muse_url.c'],
     'mood': ['jolly/jolly_mood.c'],
+    'glance': ['jolly/jolly_glance.c'],
 }
+JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
 
-def build_and_run(name, sources):
+def build_and_run(name, sources, extra=(), args=()):
     with tempfile.TemporaryDirectory() as tmp:
         exe = Path(tmp) / name
         cc = shlex.split(os.environ.get('CC', 'cc'))
         cmd = [*cc, '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(MUSE), '-I', str(TESTS),
-               str(TESTS / f'test_{name}.c'), *[str(MUSE / s) for s in sources], '-o', str(exe)]
+               str(TESTS / f'test_{name}.c'), *[str(MUSE / s) for s in sources], *extra, '-o', str(exe)]
         build = subprocess.run(cmd, capture_output=True, text=True)
         if build.returncode:
             return build.returncode, build.stdout + build.stderr
-        run = subprocess.run([str(exe)], capture_output=True, text=True)
+        run = subprocess.run([str(exe), *args], capture_output=True, text=True)
         return run.returncode, run.stdout + run.stderr
 
 
@@ -69,6 +71,15 @@ class JollyHost(unittest.TestCase):
 
     def test_orient(self):
         code, out = build_and_run('orient', CASES['orient'])
+        self.assertEqual(code, 0, out)
+
+    def test_glance(self):
+        # cJSON comes from managed_components/, which only exists after a build or
+        # reconfigure (as for test_link_discovery), or CJSON_SOURCE_DIR.
+        if not (JSON / 'cJSON.c').exists():
+            self.skipTest(f'no cJSON at {JSON}: run idf.py reconfigure first')
+        code, out = build_and_run('glance', CASES['glance'], extra=['-I', str(JSON), str(JSON / 'cJSON.c')],
+                                  args=[str(TESTS)])
         self.assertEqual(code, 0, out)
 
     def test_mood(self):
