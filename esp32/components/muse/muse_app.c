@@ -33,6 +33,7 @@
 #include "muse_wifi.h"
 #if CONFIG_MUSE_JOLLY
 #include "jolly/jolly_client.h"
+#include "jolly/jolly_imu.h"
 #endif
 
 static const char *TAG = "muse";
@@ -95,6 +96,7 @@ void muse_app_run(const muse_board_t *board)
     muse_hatch_start();
 #if CONFIG_MUSE_JOLLY
     jolly_client_start();   /* the Mac Mini's Guardián, for Jolly's mood and screens */
+    jolly_imu_start(board->i2c_bus ? board->i2c_bus() : NULL);   /* an MPU-6050, if one is fitted */
 #endif
     /* Home Link owns the radios; these just hand it the saved settings. */
     muse_wifi_apply();

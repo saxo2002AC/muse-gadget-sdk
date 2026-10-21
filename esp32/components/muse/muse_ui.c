@@ -43,6 +43,7 @@
 #if CONFIG_MUSE_JOLLY
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_eyes.h"
+#include "jolly/jolly_imu.h"
 #include "jolly/jolly_mood.h"
 #include "jolly/jolly_pages.h"
 #define SETTINGS_COL (1 + JOLLY_PAGES)   /* Jolly, its status pages, then Muse's settings */
@@ -569,7 +570,7 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
     jolly_mood_in_t in = {
         .voice = mode, .link = link.link, .level = level, .sec_level = have ? s_glance.sec.level : JLV_OK,
         .quiet = have && s_glance.quiet, .now_ms = now, .pet_until_ms = s_pet_until_ms,
-        .feliz_until_ms = s_feliz_until_ms,
+        .feliz_until_ms = s_feliz_until_ms, .motion = jolly_imu_mood(now),
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
     jolly_eyes_tick(now, voice_level);   /* the reply's level moves the talking mouth */

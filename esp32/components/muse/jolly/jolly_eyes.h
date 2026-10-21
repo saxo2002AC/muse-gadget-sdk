@@ -42,6 +42,9 @@ void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (
 /* A finger is holding Jolly's face (push-to-talk). */
 bool jolly_eyes_holding(void);
 
+/* A finger is on Jolly's face at all. Safe to read from any task. */
+bool jolly_eyes_touched(void);
+
 /* The mood to show: applied behind the next blink, or now for moods that
  * don't blink. */
 void jolly_eyes_set_mood(jolly_mood_t m);

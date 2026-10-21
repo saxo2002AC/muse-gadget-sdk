@@ -171,3 +171,12 @@ bool jolly_client_series(bool day, jolly_series_t *s)
     s->rx_peak_kbps = 46000;
     return true;
 }
+
+/* No IMU in the simulator. */
+#include "jolly/jolly_imu.h"
+
+jolly_mood_t jolly_imu_mood(int64_t now_ms)
+{
+    (void)now_ms;
+    return JM_TRANQUILO;
+}

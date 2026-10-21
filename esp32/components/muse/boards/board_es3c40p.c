@@ -441,6 +441,12 @@ static esp_err_t power_off(void)
     return ESP_FAIL;
 }
 
+/* The I2C header's bus (SDA 16, SCL 15), for an add-on IMU (jolly_imu). */
+static void *i2c_bus(void)
+{
+    return s_i2c;
+}
+
 /* Live: under LVGL's lock, so no flush is mid-way, then the whole screen redrawn. */
 static bool apply_live(es3c40p_madctl_t m)
 {
@@ -526,6 +532,7 @@ static muse_board_t s_board = {
     .width = LCD_H_RES,
     .height = LCD_V_RES,
     .console = board_console,
+    .i2c_bus = i2c_bus,
     .round = false,
     .touch = true,
     .diagonal_in = 4.0f,

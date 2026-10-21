@@ -43,6 +43,7 @@
 #include "muse_secret.h"
 #if CONFIG_MUSE_JOLLY
 #include "jolly/jolly_client.h"
+#include "jolly/jolly_imu.h"
 #endif
 #include "muse_settings.h"
 #include "muse_state.h"
@@ -717,6 +718,9 @@ static bool console_command(char *line, bool whole)
     }
 #if CONFIG_MUSE_JOLLY
     if (whole && jolly_client_console_command(line)) {   /* the Guardián's URL and key: serial only */
+        return true;
+    }
+    if (whole && jolly_imu_console_command(line)) {
         return true;
     }
 #endif

@@ -197,6 +197,11 @@ bool jolly_eyes_holding(void)
     return jolly_gesture_holding(&s_gesture);
 }
 
+bool jolly_eyes_touched(void)
+{
+    return s_gesture.state != 0;   /* one word, written by the LVGL task: a stale read is harmless */
+}
+
 void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (*on_hold)(bool down))
 {
     s_on_pet = on_pet;

@@ -89,6 +89,31 @@ same blink. The eyes keep their size and spacing, 26 px higher.
 | durmiendo | a tiny line and a swelling snore bubble |
 | desconectado | a flat grey line |
 
+## Touch and motion
+
+- **Touch on the face** (`jolly_gesture.c`): a tap pets Jolly. A hold of 350 ms
+  without moving more than 20 px is push-to-talk, the BOOT key's path through
+  `muse_input_touch_talk()`, until the finger lifts; Jolly shows escuchando
+  meanwhile. Moving further first is a swipe to another page, so neither.
+- **IMU** (`jolly_imu.c`, `jolly_motion.c`): an optional MPU-6050 (GY-521) on the
+  I2C header (3V3, GND, SDA IO16, SCL IO15; 0x68 beside the touch controller's
+  0x38 and the codec's 0x18), probed at start. Without it nothing changes. With it,
+  a 3 KB PSRAM-stack task reads the accelerometer at 100 Hz (gyro off, ±8 g).
+  `>imu` prints whether it's there, the last reading in g, and the mood it asks for.
+
+| Motion | Mood | For |
+|---|---|---|
+| shake (acceleration spread > 450 mg for 400 ms) | mareado | 3 s |
+| freefall (< 0.3 g for 120 ms) | asustado | until the landing, 1.5 s at most |
+| landing (> 2 g within 1.5 s of a fall) | aliviado | 2.5 s |
+| knock (> 2.5 g for ≤ 30 ms, idle or touched) | enojado | 2 s |
+| face-down (gravity on −Z for 2 s) | durmiendo | until it's turned up |
+
+The arbiter puts these after voice and a pat. They win over no link, espía,
+feliz and quiet hours, but not over a current crit: security still wins over
+play. Face-down assumes the GY-521 lies flat, chip side towards the screen's
+front. `>imu` shows which way gravity reads once it's fitted.
+
 ## Decisions
 
 - **No clock:** the firmware has no SNTP, so the status bar shows Wi-Fi and the
