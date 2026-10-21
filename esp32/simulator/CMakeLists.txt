@@ -173,7 +173,7 @@ if(MUSE_SIM_JOLLY)
         "${MUSE_COMPONENT_DIR}/fonts/jolly_font_28.c"
         src/sim_jolly.c
     )
-    target_compile_definitions(muse_simulator PRIVATE CONFIG_MUSE_JOLLY=1)
+    target_compile_definitions(muse_simulator PRIVATE CONFIG_MUSE_JOLLY=1 CONFIG_MUSE_UI_SPANISH=1)
 endif()
 
 target_include_directories(muse_simulator PRIVATE

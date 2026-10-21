@@ -186,7 +186,7 @@ static bool s_ready;
 static float s_level;
 static int s_shown_state = -1;
 static const char *s_shown_name;
-static const char *s_idle_name = "READY";   /* idle's label: set by the Wi-Fi state */
+static const char *s_idle_name;   /* idle's label, set by the Wi-Fi state; MODE_NAMES' until then */
 static int s_shown_lit = -1;
 static uint32_t s_shown_accent;
 static bool s_meter_visible = true;
@@ -222,14 +222,22 @@ static int s_big_y;             /* Muse's centre at full size */
 static int s_muse_y;            /* and now */
 static int s_from_px, s_from_y, s_to_px, s_to_y;
 
+/* The status words, in English or Spanish (CONFIG_MUSE_UI_SPANISH). The
+ * status font is ASCII, so the Spanish ones go without accents. */
+#if CONFIG_MUSE_UI_SPANISH
+#define T(en, es) es
+#else
+#define T(en, es) en
+#endif
+
 static const char *const MODE_NAMES[MUSE_MODE_COUNT] = {
-    [MUSE_MODE_BOOT] = "WAKING UP",
-    [MUSE_MODE_IDLE] = "READY",
-    [MUSE_MODE_LISTENING] = "LISTENING",
-    [MUSE_MODE_THINKING] = "THINKING",
-    [MUSE_MODE_SPEAKING] = "SPEAKING",
-    [MUSE_MODE_ERROR] = "ERROR",
-    [MUSE_MODE_OFF] = "GOODBYE",
+    [MUSE_MODE_BOOT] = T("WAKING UP", "DESPERTANDO"),
+    [MUSE_MODE_IDLE] = T("READY", "LISTO"),
+    [MUSE_MODE_LISTENING] = T("LISTENING", "ESCUCHANDO"),
+    [MUSE_MODE_THINKING] = T("THINKING", "PENSANDO"),
+    [MUSE_MODE_SPEAKING] = T("SPEAKING", "HABLANDO"),
+    [MUSE_MODE_ERROR] = T("ERROR", "ERROR"),
+    [MUSE_MODE_OFF] = T("GOODBYE", "ADIOS"),
 };
 
 /*
@@ -1439,13 +1447,13 @@ static const char *idle_name(muse_wifi_state_t wifi)
         joined = true;
         return MODE_NAMES[MUSE_MODE_IDLE];
     case MUSE_WIFI_OFF:
-        return "WI-FI OFF";
+        return T("WI-FI OFF", "WI-FI APAGADO");
     case MUSE_WIFI_NO_NETWORK:
-        return "SET UP WI-FI";
+        return T("SET UP WI-FI", "CONFIGURA EL WI-FI");
     case MUSE_WIFI_NOT_NEARBY:
-        return "NO WI-FI";   /* none of the saved networks is in range */
+        return T("NO WI-FI", "SIN WI-FI");   /* none of the saved networks is in range */
     default:
-        return joined ? "RECONNECTING" : "CONNECTING";
+        return joined ? T("RECONNECTING", "RECONECTANDO") : T("CONNECTING", "CONECTANDO");
     }
 }
 
@@ -1617,7 +1625,7 @@ static void update_power(float now)
 static void update_status(muse_mode_t mode, float now)
 {
     uint32_t accent = muse_pixel_accent(mode);
-    const char *name = mode == MUSE_MODE_IDLE ? s_idle_name : MODE_NAMES[mode];
+    const char *name = mode == MUSE_MODE_IDLE && s_idle_name ? s_idle_name : MODE_NAMES[mode];
 
     if (name != s_shown_name) {
         lv_label_set_text(s_state_lbl, name);

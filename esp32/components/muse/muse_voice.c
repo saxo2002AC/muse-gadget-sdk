@@ -310,7 +310,11 @@ static bool record(bool barge_in, size_t *held, char *why, size_t cap)
         }
         muse_state_set_progress((float)n / MAX_FRAMES);
         if (!heard && ok && tick) {
+#if CONFIG_MUSE_UI_SPANISH
+            muse_state_set_caption("%s %.1fs", s_live ? "ESCUCHANDO" : "GRABANDO", (double)n / MUSE_AUDIO_RATE);
+#else
             muse_state_set_caption("%s %.1fs", s_live ? "LISTENING" : "RECORDING", (double)n / MUSE_AUDIO_RATE);
+#endif
         }
         /*
          * Capture runs 60-80 ms behind real time and people let go on their
