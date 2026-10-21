@@ -63,6 +63,11 @@ static const mood_t MOODS[JM_COUNT] = {
     [JM_ESPIA]        = { 0xFFC145, 1.06f, 1.00f, 0.34f, 0.30f, 0.0f, 10, 4, .40f, 900, 2000, true },
     [JM_ALERTA]       = { 0xFF5C6C, 1.00f, 1.12f, 0.00f, 0.00f, 0.0f, 20, 10, .85f, 220, 600, true },
     [JM_DESCONECTADO] = { 0x5D6380, 1.00f, 0.12f, 0.00f, 0.00f, 0.0f, 0, 0, 0.0f, 0, 0, false },
+    /* From the IMU; first cuts, until the face's redesign. */
+    [JM_MAREADO]      = { 0xC59BFF, 1.00f, 0.96f, 0.10f, 0.10f, 0.0f, 24, 16, 1.0f, 140, 320, false },
+    [JM_ASUSTADO]     = { 0xE8F4FF, 1.06f, 1.18f, 0.00f, 0.00f, 0.0f, 3, 3, 0.2f, 120, 300, false },
+    [JM_ALIVIADO]     = { 0x8CF5E0, 1.02f, 1.00f, 0.00f, 0.00f, 0.6f, 8, 5, .30f, 900, 2200, true },
+    [JM_ENOJADO]      = { 0xFF8A4C, 1.04f, 0.92f, 0.36f, 0.00f, 0.0f, 6, 3, .30f, 400, 1200, true },
 };
 
 typedef struct {
@@ -435,15 +440,18 @@ static void place_mouth(lv_color_t color, float gx, float gy)
         bubble == s_m.bubble && rgb == s_m.color) {
         return;   /* still: nothing to redraw */
     }
-    bool smile = m.kind == JMOUTH_SMILE;
+    bool smile = m.kind == JMOUTH_SMILE || m.kind == JMOUTH_FROWN;
     lv_obj_set_flag(s_arc, LV_OBJ_FLAG_HIDDEN, !smile);
     lv_obj_set_flag(s_mouth, LV_OBJ_FLAG_HIDDEN, smile);
     if (smile) {
-        /* The arc's circle sits above the mouth line, so its bottom is the smile. */
+        /* A smile is the bottom of a circle sitting above the mouth line; a frown,
+         * the top of one sitting below it. */
+        bool frown = m.kind == JMOUTH_FROWN;
+        lv_arc_set_angles(s_arc, frown ? 215 : 35, frown ? 325 : 145);
         lv_obj_set_size(s_arc, m.w, m.w);
         lv_obj_set_style_arc_width(s_arc, m.thick, LV_PART_INDICATOR);
         lv_obj_set_style_arc_color(s_arc, color, LV_PART_INDICATOR);
-        lv_obj_align(s_arc, LV_ALIGN_CENTER, x, y - m.w / 2 + m.thick);
+        lv_obj_align(s_arc, LV_ALIGN_CENTER, x, frown ? y + m.w / 2 - m.thick : y - m.w / 2 + m.thick);
     } else {
         lv_obj_set_size(s_mouth, m.w, h);
         lv_obj_set_style_radius(s_mouth, m.kind == JMOUTH_O ? LV_RADIUS_CIRCLE : (h < m.w ? h / 2 : m.w / 2), 0);

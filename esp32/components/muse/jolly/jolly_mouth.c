@@ -40,6 +40,14 @@ jolly_mouth_t jolly_mouth_for(jolly_mood_t mood)
         return (jolly_mouth_t){ .kind = JMOUTH_LINE, .w = 64, .thick = 6 };
     case JM_ESPIA:
         return (jolly_mouth_t){ .kind = JMOUTH_LINE, .w = 40, .thick = 7 };
+    case JM_MAREADO:
+        return (jolly_mouth_t){ .kind = JMOUTH_LINE, .w = 34, .thick = 6, .jitter = true };
+    case JM_ASUSTADO:
+        return (jolly_mouth_t){ .kind = JMOUTH_O, .w = 28, .thick = 6 };
+    case JM_ALIVIADO:
+        return (jolly_mouth_t){ .kind = JMOUTH_SMILE, .w = 72, .thick = 8 };
+    case JM_ENOJADO:
+        return (jolly_mouth_t){ .kind = JMOUTH_FROWN, .w = 60, .thick = 8 };
     case JM_TRANQUILO:
     default:
         return (jolly_mouth_t){ .kind = JMOUTH_SMILE, .w = 56, .thick = 7 };

@@ -36,6 +36,7 @@ typedef enum {
     JMOUTH_LINE,    /* a rounded bar, w x thick */
     JMOUTH_O,       /* a ring, w px across */
     JMOUTH_TALK,    /* a rounded rect w across, its height jolly_mouth_talk_h() */
+    JMOUTH_FROWN,   /* the smile's arc upside down */
 } jolly_mouth_kind_t;
 
 typedef struct {

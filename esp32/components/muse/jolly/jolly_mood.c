@@ -31,6 +31,10 @@ jolly_mood_t jolly_mood_pick(const jolly_mood_in_t *in)
     if (in->now_ms < in->pet_until_ms) {
         return JM_CARINO;
     }
+    bool current_crit = in->link == JL_OK && in->level == JLV_CRIT;
+    if (in->motion != JM_TRANQUILO && in->motion < JM_COUNT && !current_crit) {
+        return in->motion;
+    }
     if (in->link != JL_OK) {
         return JM_DESCONECTADO;
     }

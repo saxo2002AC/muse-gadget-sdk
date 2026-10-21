@@ -166,6 +166,7 @@ if(MUSE_SIM_JOLLY)
         "${MUSE_COMPONENT_DIR}/jolly/jolly_text.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_mouth.c"
         "${MUSE_COMPONENT_DIR}/jolly/jolly_gesture.c"
+        "${MUSE_COMPONENT_DIR}/jolly/jolly_motion.c"
         "${MUSE_COMPONENT_DIR}/fonts/jolly_font_12.c"
         "${MUSE_COMPONENT_DIR}/fonts/jolly_font_16.c"
         "${MUSE_COMPONENT_DIR}/fonts/jolly_font_20.c"

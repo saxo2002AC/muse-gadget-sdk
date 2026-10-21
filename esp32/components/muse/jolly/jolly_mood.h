@@ -33,7 +33,9 @@ extern "C" {
 
 typedef enum {
     JM_TRANQUILO, JM_ESCUCHANDO, JM_PENSANDO, JM_HABLANDO, JM_FELIZ, JM_CARINO,
-    JM_DURMIENDO, JM_ESPIA, JM_ALERTA, JM_DESCONECTADO, JM_COUNT,
+    JM_DURMIENDO, JM_ESPIA, JM_ALERTA, JM_DESCONECTADO,
+    JM_MAREADO, JM_ASUSTADO, JM_ALIVIADO, JM_ENOJADO,   /* from the IMU (jolly_motion.h) */
+    JM_COUNT,
 } jolly_mood_t;
 
 /* The board's link to the Guardián (§1.8). */
@@ -53,10 +55,12 @@ typedef struct {
     int64_t now_ms;           /* the board's monotonic clock */
     int64_t pet_until_ms;     /* cariño until then (jolly_mood_pet_until) */
     int64_t feliz_until_ms;   /* feliz until then (jolly_mood_feliz_until) */
+    jolly_mood_t motion;      /* what the IMU asks for (jolly_motion.h); JM_TRANQUILO for nothing */
 } jolly_mood_in_t;
 
-/* The mood, first match wins: voice, pat, no link, crit, a security warning,
- * a crit just cleared, quiet hours, else tranquilo. An ops warning alone stays
+/* The mood, first match wins: voice, pat, a motion mood (unless a current
+ * crit: security still wins over play), no link, crit, a security warning, a
+ * crit just cleared, quiet hours, else tranquilo. An ops warning alone stays
  * tranquilo (its count shows on the screen instead). */
 jolly_mood_t jolly_mood_pick(const jolly_mood_in_t *in);
 
