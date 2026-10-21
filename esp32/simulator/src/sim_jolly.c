@@ -175,6 +175,11 @@ bool jolly_client_series(bool day, jolly_series_t *s)
 /* No IMU in the simulator. */
 #include "jolly/jolly_imu.h"
 
+uint32_t jolly_imu_flashes(void)
+{
+    return 0;
+}
+
 jolly_mood_t jolly_imu_mood(int64_t now_ms)
 {
     (void)now_ms;

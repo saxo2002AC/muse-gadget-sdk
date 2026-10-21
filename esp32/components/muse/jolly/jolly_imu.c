@@ -149,6 +149,17 @@ bool jolly_imu_start(void *bus)
     return true;
 }
 
+uint32_t jolly_imu_flashes(void)
+{
+    if (!s_present) {
+        return 0;
+    }
+    taskENTER_CRITICAL(&s_mux);
+    uint32_t n = s_mood.flashes;
+    taskEXIT_CRITICAL(&s_mux);
+    return n;
+}
+
 jolly_mood_t jolly_imu_mood(int64_t now_ms)
 {
     if (!s_present) {

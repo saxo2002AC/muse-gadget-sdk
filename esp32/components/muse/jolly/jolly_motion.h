@@ -68,6 +68,7 @@ typedef struct {
     jolly_mood_t mood;             /* the passing one */
     int64_t until;
     int64_t startled_until;        /* a shake's sorprendido, before its mareado */
+    uint32_t flashes;              /* landings and knocks so far: face v5 flashes on each */
     bool face_down;                /* under it: durmiendo */
 } jolly_motion_mood_t;
 

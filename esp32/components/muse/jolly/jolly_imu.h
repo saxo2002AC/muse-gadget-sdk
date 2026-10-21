@@ -41,6 +41,10 @@ bool jolly_imu_start(void *bus);
  * for none, or without an IMU. */
 jolly_mood_t jolly_imu_mood(int64_t now_ms);
 
+/* How many landings and knocks so far (0 without an IMU): a change is one to
+ * flash the screen for, whatever mood shows. */
+uint32_t jolly_imu_flashes(void);
+
 bool jolly_imu_console_command(const char *line);
 
 #ifdef __cplusplus

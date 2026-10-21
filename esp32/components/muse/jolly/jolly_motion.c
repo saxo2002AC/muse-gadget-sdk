@@ -164,6 +164,7 @@ void jolly_motion_mood_init(jolly_motion_mood_t *s)
     s->mood = JM_TRANQUILO;
     s->until = 0;
     s->startled_until = 0;
+    s->flashes = 0;
     s->face_down = false;
 }
 
@@ -182,10 +183,12 @@ void jolly_motion_mood_on(jolly_motion_mood_t *s, jolly_motion_ev_t ev, int64_t 
     case JME_LAND:
         s->mood = JM_ALIVIADO;
         s->until = now + JOLLY_ALIVIADO_MS;
+        s->flashes++;
         break;
     case JME_KNOCK:
         s->mood = JM_ENOJADO;
         s->until = now + JOLLY_ENOJADO_MS;
+        s->flashes++;
         break;
     case JME_FACE_DOWN:
         s->face_down = true;

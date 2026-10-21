@@ -136,6 +136,14 @@ static void moods(void)
     assert(jolly_motion_mood_now(&s, 20000 + JOLLY_ENOJADO_MS) == JM_DURMIENDO);
     jolly_motion_mood_on(&s, JME_FACE_UP, 30000);
     assert(jolly_motion_mood_now(&s, 30000) == JM_TRANQUILO);
+    /* Face v5 flashes the screen on the landing and the knock themselves,
+     * whatever mood shows: one count each, nothing for the others. */
+    assert(s.flashes == 2);
+    jolly_motion_mood_on(&s, JME_SHAKE, 31000);
+    jolly_motion_mood_on(&s, JME_FREEFALL, 32000);
+    assert(s.flashes == 2);
+    jolly_motion_mood_on(&s, JME_KNOCK, 33000);
+    assert(s.flashes == 3);
 }
 
 static void arbiter(void)

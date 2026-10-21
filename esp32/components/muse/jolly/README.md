@@ -101,7 +101,8 @@ box starts below the status line, at y 30).
   out the corner (guiño).
 - **Extras:** "///" blush, hearts (cariño, and a pat), zzz, a sweat drop
   (asustado), sigh puffs (aliviado), the alert's pulsing screen border, and a
-  white flash when aliviado or enojado come in (a landing, a knock).
+  white flash on a landing or a knock themselves (`jolly_imu_flashes()`),
+  whatever mood is showing then.
 
 | Mood | Eyes | Mouth | Extras |
 |---|---|---|---|
@@ -140,8 +141,9 @@ under 0.6, ancha above; a loud syllable rounds into an O about one time in
 six.
 
 **Redraw budget.** Only what changed redraws: every setter compares first (a
-style set or hiding a hidden object redraws even when nothing changes), lines
-and the mouth have fixed boxes, and the glow is dropped while an eye moves (it
+style set or hiding a hidden object redraws even when nothing changes), each
+brow's and line mouth's box is just its own bounds, clear of the eyes and
+their glow, and the glow is dropped while an eye moves (it
 returns after 300 ms still). The alert's border is four 3 px strips, so its
 pulse redraws them and not the screen, in four steps per second; the flash
 steps four times in 260 ms. Between saccades and blinks only the breathing
@@ -158,11 +160,12 @@ just cleared (feliz, 4 s), quiet hours (durmiendo), else tranquilo.
 rotation by gaze) and the frame's shaking and tossing, which only show the
 sensors in a browser. The background stays the UI's black, so the lids and
 core dot are black, and the eye's shadow is a faint reflection in the mood's
-colour instead of a darker patch. The gradient has two stops
+colour instead of a darker patch. The eye's rim is drawn after its lids
+(`border_post`), so it frames the whole eye as the mockup's does. The gradient has two stops
 (`LV_GRADIENT_MAX_STOPS` is 2), light top to dark bottom. Feliz's pill has one
 radius (20) where the mockup rounds its bottom more. With Jolly, Muse's caption
-band moves under the status line, since the face now reaches the page dots, and
-it stays hidden while it's empty.
+moves under the status line, since the face now reaches the page dots, without
+its dark band (raised brows reach into it), and stays hidden while it's empty.
 
 ## Touch and motion
 

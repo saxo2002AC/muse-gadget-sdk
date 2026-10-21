@@ -57,6 +57,9 @@ void jolly_eyes_set_mood(jolly_mood_t m);
  * simulator's contact sheet); JM_COUNT gives it back to jolly_eyes_set_mood. */
 void jolly_eyes_show(jolly_mood_t m);
 
+/* A white flash over the face (a landing, a knock: jolly_imu_flashes()). */
+void jolly_eyes_flash(void);
+
 /* A pat in the middle of the eyes, as a tap there (benches, the simulator). */
 void jolly_eyes_tap(void);
 

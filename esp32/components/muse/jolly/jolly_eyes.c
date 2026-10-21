@@ -52,8 +52,7 @@ static const int16_t EYE_X[2] = { 170, 310 };
 static const int16_t BLUSH_X[2] = { 108, 372 };
 #define MOUTH_X 240
 #define MOUTH_Y 254
-#define LINE_BOX_W 140             /* a line mouth's box: fixed, so a change redraws only it */
-#define LINE_BOX_H 70
+#define LINE_MARGIN 5              /* a line's box past its points: half its 8 px width, and one */
 
 /* The UI's background is black: lids and the core dot are holes onto it. */
 #define BG 0x000000
@@ -187,6 +186,13 @@ static void border_opa(lv_obj_t *o, lv_opa_t a)
 {
     if (lv_obj_get_style_border_opa(o, 0) != a) {
         lv_obj_set_style_border_opa(o, a, 0);
+    }
+}
+
+static void border_width(lv_obj_t *o, int32_t w)
+{
+    if (lv_obj_get_style_border_width(o, 0) != w) {
+        lv_obj_set_style_border_width(o, w, 0);
     }
 }
 
@@ -341,6 +347,7 @@ static void make_eye(eye_t *e)
     lv_obj_set_style_radius(e->body, EYE_R, 0);
     lv_obj_set_style_clip_corner(e->body, true, 0);   /* lids and highlight follow the corners */
     lv_obj_set_style_border_width(e->body, EYE_RIM, 0);
+    lv_obj_set_style_border_post(e->body, true, 0);   /* the rim over the lids, as the mockup's overflow */
     lv_obj_set_style_bg_grad_dir(e->body, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_shadow_spread(e->body, -4, 0);
     lv_obj_set_style_shadow_opa(e->body, 115, 0);   /* 45 %, the mockup's glow */
@@ -467,10 +474,8 @@ void jolly_eyes_create(lv_obj_t *parent, int32_t y, void (*on_pet)(void), void (
     }
     for (int i = 0; i < 2; i++) {
         s.brow[i].line = line(s_box, BROW_T, true);
-        lv_obj_set_size(s.brow[i].line, 100, 60);
     }
     s.mline = line(s_box, 8, true);
-    lv_obj_set_size(s.mline, LINE_BOX_W, LINE_BOX_H);
     s.pill = plain(s_box, MOUTH_BG);
     lv_obj_set_style_border_width(s.pill, 7, 0);
     lv_obj_set_style_clip_corner(s.pill, true, 0);
@@ -580,9 +585,6 @@ static void apply_mood(jolly_mood_t m, bool snap)
         s_color_from = s_color_to;
         s_color_to = s_f->color;
         s_color_t0 = s_now ? s_now : 1;
-        if (m == JM_ALIVIADO || m == JM_ENOJADO) {
-            s_flash_t0 = s_now ? s_now : 1;   /* a landing, a knock: the screen flashes */
-        }
     }
     s_next_saccade = s_now;
     for (int i = 0; i < 2; i++) {
@@ -642,6 +644,13 @@ void jolly_eyes_show(jolly_mood_t m)
     s_forced = m < JM_COUNT ? m : JM_COUNT;
     if (s_box && m < JM_COUNT) {
         apply_mood(m, true);
+    }
+}
+
+void jolly_eyes_flash(void)
+{
+    if (s_forced == JM_COUNT) {
+        s_flash_t0 = s_now ? s_now : 1;
     }
 }
 
@@ -740,7 +749,9 @@ static void mouth_targets(void)
             s_t[P_MY] = v.my;
             s_t[P_BYL] = s_t[P_BYR] = -4 - s_talk.lvl * 6;
         }
-        radius(s.pill, v.kind == JV_O ? LV_RADIUS_CIRCLE : 28);
+        if (s_forced == JM_COUNT) {
+            radius(s.pill, v.kind == JV_O ? LV_RADIUS_CIRCLE : 28);
+        }
     } else if (s_mood == JM_FELIZ) {
         s_t[P_MX] = 1;
         s_t[P_MY] = .8f + .12f * sinf((float)s_now / 75);
@@ -867,7 +878,7 @@ static void draw_eye(int i, float gx, float gy, float b, int32_t jx, int32_t jy,
     }
     if (kind == JFE_SPIRAL) {
         static const int32_t BASE[3] = { 0, 120, 240 }, SPAN[3] = { 226, 218, 216 };
-        int32_t spin = (int32_t)((s_now % 1200) * 360 / 1200);
+        int32_t spin = s_forced != JM_COUNT ? 0 : (int32_t)((s_now % 1200) * 360 / 1200);
         for (int k = 0; k < 3; k++) {
             arc_angles(e->spiral[k], ((i ? -spin : spin) + BASE[k] + 720) % 360, 0, SPAN[k]);
             arc_color(e->spiral[k], c);
@@ -915,10 +926,14 @@ static void draw_brow(int i, float gx, float gy, float breath, int32_t jx, int32
     float cx = EYE_X[i] + gx + spr + jx;
     float cy = Y(BROW_Y) + gy * .4f + breath * 2 + (i ? s_x[P_BYR] : s_x[P_BYL]) + jy;
     float rad = (i ? s_x[P_BRR] : s_x[P_BRL]) * 3.14159f / 180;
-    float dx = BROW_W / 2.0f * cosf(rad), dy = BROW_W / 2.0f * sinf(rad);
-    int32_t ox = ri(cx) - 50, oy = ri(cy) - 30;
-    lv_obj_set_pos(b->line, ox, oy);
-    lv_point_precise_t p[2] = { { ri(50 - dx), ri(30 - dy) }, { ri(50 + dx), ri(30 + dy) } };
+    /* The mockup's bar is 84 px with its round ends: the line runs between
+     * the caps' centres. Its box is just the rotated bar plus its half width,
+     * so breathing redraws the brow and not the eye below it. */
+    float half = (BROW_W - BROW_T) / 2.0f;
+    float dx = half * cosf(rad), dy = half * sinf(rad);
+    int32_t hw = ri(fabsf(dx)) + BROW_T / 2 + 1, hh = ri(fabsf(dy)) + BROW_T / 2 + 1;
+    place(b->line, ri(cx) - hw, ri(cy) - hh, 2 * hw, 2 * hh);
+    lv_point_precise_t p[2] = { { hw - ri(dx), hh - ri(dy) }, { hw + ri(dx), hh + ri(dy) } };
     line_points(b->line, b->pts, p, 2);
     line_color(b->line, c);
 }
@@ -951,34 +966,49 @@ static void draw_mouth(float gx, float gy, float breath, int32_t jx, int32_t jy,
         if (mo == JFM_ZIG || mo == JFM_WAVE) {   /* the nervous mouths waver */
             wig = s_forced != JM_COUNT ? 0 : ri(4 * sinf(2 * 3.14159f * (float)(s_now % 900) / 900));
         }
+        /* The box is the line's own bounds plus half its width: a smile's
+         * breathing redraws the smile, not the eyes' glow above it. */
+        int32_t x0 = s.mpts[0].x, x1 = x0, y0 = s.mpts[0].y, y1 = y0;
+        for (int i = 1; i < s.mn; i++) {
+            x0 = s.mpts[i].x < x0 ? s.mpts[i].x : x0;
+            x1 = s.mpts[i].x > x1 ? s.mpts[i].x : x1;
+            y0 = s.mpts[i].y < y0 ? s.mpts[i].y : y0;
+            y1 = s.mpts[i].y > y1 ? s.mpts[i].y : y1;
+        }
+        int32_t m = LINE_MARGIN;
         lv_point_precise_t p[JOLLY_MOUTH_POINTS];
         for (int i = 0; i < s.mn; i++) {
-            p[i].x = s.mpts[i].x + LINE_BOX_W / 2;
-            p[i].y = s.mpts[i].y + LINE_BOX_H / 2;
+            p[i].x = s.mpts[i].x - x0 + m;
+            p[i].y = s.mpts[i].y - y0 + m;
         }
-        lv_obj_set_pos(s.mline, ri(cx) - LINE_BOX_W / 2 + wig, ri(cy) - LINE_BOX_H / 2);
+        place(s.mline, ri(cx) + x0 - m + wig, ri(cy) + y0 - m, x1 - x0 + 2 * m, y1 - y0 + 2 * m);
         line_points(s.mline, s.mkeep, p, s.mn);
         line_color(s.mline, c);
     } else if (mo == JFM_PILL) {
         float sx = s_x[P_MX], sy = s_x[P_MY];
         int32_t w = ri(96 * sx), h = ri(56 * sy);
+        int32_t bw = ri(7 * fminf(sx, sy));
+        bw = bw < 2 ? 2 : bw;
         w = w < 20 ? 20 : w;
-        h = h < 16 ? 16 : h;
+        h = h < 9 ? 9 : h;
+        border_width(s.pill, bw);
         /* Scaled about 50 % / 30 %, as the mockup's transform-origin. */
         int32_t top = ri(cy - 24 + 16.8f * (1 - sy));
         place(s.pill, ri(cx) - w / 2, top, w, h);
         border_color(s.pill, c);
         if (s_f->fx & JFX_TONGUE) {
-            int32_t iw = w - 14, ih = h - 14;
+            int32_t iw = w - 2 * bw, ih = h - 2 * bw;
             for (int i = 0; i < 3; i++) {
                 lv_obj_set_pos(s.tongue[i], iw / 2 - 15 + i * 10, ih - 3 - 10 + (i == 1 ? 0 : 5));
             }
         }
     } else if (mo == JFM_RING) {
         float os = s_x[P_OS] * (s_mood == JM_DURMIENDO ? 1 + breath * .14f : 1);
-        int32_t w = ri(50 * os), h = ri(56 * os);
-        w = w < 16 ? 16 : w;
-        h = h < 16 ? 16 : h;
+        int32_t w = ri(50 * os), h = ri(56 * os), bw = ri(7 * os);
+        bw = bw < 2 ? 2 : bw;
+        w = w < 8 ? 8 : w;
+        h = h < 9 ? 9 : h;
+        border_width(s.ring, bw);
         place(s.ring, ri(cx) - w / 2, ri(cy) - h / 2, w, h);
         border_color(s.ring, c);
     } else if (mo == JFM_GRILL) {
@@ -1081,7 +1111,7 @@ void jolly_eyes_tick(int64_t now_ms, float level)
     }
     jolly_mood_t want = s_forced != JM_COUNT ? s_forced : s_pending;
     if (want != s_mood) {
-        apply_mood(want, false);
+        apply_mood(want, s_forced != JM_COUNT);   /* a picture snaps, life springs */
     }
     schedule();
     mouth_targets();

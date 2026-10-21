@@ -585,6 +585,12 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         .surprise_until_ms = s_surprise_until_ms, .wink_until_ms = s_wink_until_ms,
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
+    static uint32_t s_flashes;
+    uint32_t flashes = jolly_imu_flashes();
+    if (flashes != s_flashes) {
+        jolly_eyes_flash();   /* a landing or a knock, whatever the mood shows */
+        s_flashes = flashes;
+    }
     jolly_eyes_tick(now, voice_level);   /* the reply's level moves the talking mouth */
 }
 #endif
@@ -1142,9 +1148,11 @@ static void build_screen(void)
         lv_obj_set_style_bg_opa(s_caption_lbl, LV_OPA_70, 0);
         lv_label_set_long_mode(s_caption_lbl, LV_LABEL_LONG_MODE_DOTS);
 #if CONFIG_MUSE_JOLLY
-        /* Jolly's face v5 reaches down to the dots: the band goes under the
-         * status line instead, where only a startled brow ever rises. */
+        /* Jolly's face v5 reaches down to the dots: the caption goes under the
+         * status line instead. Raised brows (escuchando, hablando) reach into
+         * it, so it has no dark band: the text alone, over them. */
         lv_obj_align(s_caption_lbl, LV_ALIGN_TOP_MID, 0, 30);
+        lv_obj_set_style_bg_opa(s_caption_lbl, LV_OPA_TRANSP, 0);
 #else
         /* Touch screens need the caption above the navigation dots too. */
         lv_obj_align(s_caption_lbl, LV_ALIGN_BOTTOM_MID, 0, (s_tall || s_tv) ? -30 : -3);
