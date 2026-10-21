@@ -1,0 +1,61 @@
+{
+  "v": 1,
+  "ts": 1792634820,
+  "seq": 18342,
+  "age_s": 3,
+  "level": "ok",
+  "quiet": false,
+  "silenced": false,
+  "crit": 0,
+  "warn": 0,
+  "head": "",
+  "mac": {
+    "up_s": 5788800,
+    "cpu": 23,
+    "temp": 48,
+    "therm": "normal",
+    "mem": "ok",
+    "swap_mb": 2662,
+    "swap_tot_mb": 4096,
+    "disk_pct": 5,
+    "disk_free_gb": 266,
+    "macos": "26.7.1",
+    "updates": 0,
+    "backup": {
+      "state": "ok",
+      "age_s": 3600
+    },
+    "monitor": {
+      "state": "ok",
+      "age_s": 120
+    }
+  },
+  "apps": {
+    "up": 25,
+    "total": 25,
+    "down": []
+  },
+  "net": {
+    "lat_ms": 14,
+    "rx_kbps": 8400,
+    "tx_kbps": 1200,
+    "cf": 4,
+    "cf_exp": 4,
+    "ts_state": "up",
+    "ts_online": 3,
+    "speed": {
+      "down": 312,
+      "up": 41,
+      "age_s": 2400
+    }
+  },
+  "sec": {
+    "level": "ok",
+    "ports": 15,
+    "ports_unreg": 3,
+    "plists": 71,
+    "ts_nodes": 3,
+    "ssh_fail_24h": 0,
+    "learning": true
+  }
+}

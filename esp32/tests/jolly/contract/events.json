@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "ts": 1792634820,
+  "seq": 12,
+  "events": [
+    {
+      "t": 1792634100,
+      "sev": "crit",
+      "cat": "plist",
+      "txt": "Servicio nuevo en arranque: com.unknown.helper.plist",
+      "open": true
+    },
+    {
+      "t": 1792630000,
+      "sev": "warn",
+      "cat": "port",
+      "txt": "Puerto sin registro: 8787 (node)",
+      "open": true
+    },
+    {
+      "t": 1792620000,
+      "sev": "info",
+      "cat": "app",
+      "txt": "Resuelta: scanner-disparadores caída",
+      "open": false
+    }
+  ]
+}

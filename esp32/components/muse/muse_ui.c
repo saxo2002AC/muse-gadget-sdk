@@ -1752,7 +1752,7 @@ esp_err_t muse_ui_start(void)
     /* The full layout assumes room for the 466 px board's header and bottom
      * captions. Short landscape panels (BOX-3) need the compact layout too,
      * as does anything narrower than its fixed 256 px captions. */
-    bool short_landscape = s_w > s_h && s_h < 320;
+    bool short_landscape = s_w > s_h && s_h <= 320;   /* 480x320 too: the full layout wants ~466 px of height */
     s_small = s_h < 200 || s_w < 200 || short_landscape || s_w < 300;
     s_tall = s_small && s_h >= s_w + 64;
     /* Small screens keep room for the status line and button icons. A narrow

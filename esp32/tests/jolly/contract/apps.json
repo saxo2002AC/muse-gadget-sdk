@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "ts": 1792634820,
+  "seq": 7,
+  "apps": [
+    {
+      "id": "scalp",
+      "port": 3000,
+      "st": "dep",
+      "for_s": 0
+    },
+    {
+      "id": "secondleg",
+      "port": 3001,
+      "st": "up",
+      "for_s": 86400
+    },
+    {
+      "id": "scanner-disparadores",
+      "port": 3020,
+      "st": "down",
+      "for_s": 180
+    },
+    {
+      "id": "muse-voz",
+      "port": 3024,
+      "st": "unk",
+      "for_s": 0
+    }
+  ]
+}
