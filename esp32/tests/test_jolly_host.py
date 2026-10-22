@@ -24,6 +24,7 @@ CASES = {
     'motion': ['jolly/jolly_motion.c', 'jolly/jolly_mood.c'],
     'face': ['jolly/jolly_face_spec.c'],
     'alarm': ['jolly/jolly_alarm.c'],
+    'dns': ['muse_dns.c'],
 }
 JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
@@ -99,6 +100,10 @@ class JollyHost(unittest.TestCase):
 
     def test_motion(self):
         code, out = build_and_run('motion', CASES['motion'], extra=['-lm'])
+        self.assertEqual(code, 0, out)
+
+    def test_dns(self):
+        code, out = build_and_run('dns', CASES['dns'])
         self.assertEqual(code, 0, out)
 
     def test_alarm(self):

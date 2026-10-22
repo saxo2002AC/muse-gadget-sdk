@@ -40,8 +40,18 @@ bool muse_resolve(const muse_url_t *url, char ip[16]);
  * asks again. lwIP's own cache is left alone (see muse_resolve.c). */
 void muse_resolve_forget(const muse_url_t *url);
 
+/* Our DNS servers ahead of the router's (muse_dns.h): from NVS (>dns_servers=)
+ * or CONFIG_MUSE_DNS_SERVERS, put in on every lease and checked every 5 s
+ * against DHCP renewals. Call once; it waits for the network to come up. */
+void muse_dns_start(void);
+
+/* Resolves `host` (as esp-tls will), up to 3 tries 0.3 s then 1 s apart, so a
+ * flaky DNS server doesn't fail a turn. Blocks: worker tasks only. */
+bool muse_resolve_warm(const char *host);
+
 /* The serial console's >dns=NAME: prints @dns {name, ip | error, ms,
- * servers, forgets}. False for any other line. */
+ * servers, ours, forgets}; and >dns_servers=a.b.c.d[,a.b.c.d] (empty: the
+ * router's only), kept in NVS. False for any other line. */
 bool muse_resolve_console_command(const char *line);
 
 #ifdef __cplusplus

@@ -20,6 +20,9 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+#if CONFIG_MUSE_HATCH
+#include "muse_resolve.h"
+#endif
 #include "muse_audio.h"
 #include "muse_battery.h"
 #include "muse_board.h"
@@ -94,6 +97,9 @@ void muse_app_run(const muse_board_t *board)
     }
 
     muse_hatch_start();
+#if CONFIG_MUSE_HATCH
+    muse_dns_start();   /* our DNS servers ahead of the router's (muse_dns.h) */
+#endif
 #if CONFIG_MUSE_JOLLY
     jolly_client_start();   /* the Mac Mini's Guardián, for Jolly's mood and screens */
     jolly_imu_start(board->i2c_bus ? board->i2c_bus() : NULL);   /* an MPU-6050, if one is fitted */

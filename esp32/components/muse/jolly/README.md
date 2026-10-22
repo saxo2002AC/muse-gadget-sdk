@@ -37,7 +37,8 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 >grd                                               URL, key length, link, whether a glance arrived, alarm_s
 >lcd / >lcd_orient=0|1 / >lcd_madctl=S,X,Y / >lcd_touchlog=1
 >tts_url=http://Mac-mini-de-acserver.local:3024 / >tts_key=...
->dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, forgets}
+>dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, ours, forgets}
+>dns_servers=1.1.1.1,8.8.8.8                       DNS ahead of the router's (empty: the router's only); NVS
 >whyreset                                          the last 4 setup-wipe sources with uptime, kept across resets
 ```
 
@@ -221,6 +222,13 @@ front. `>imu` shows which way gravity reads once it's fitted.
   over 1.5 g within 1 s, and face-down after 1 s with the screen dimmed. The
   detector keeps its own (above), which its tests pin down; dimming isn't
   wired. To be settled once an MPU-6050 is on the board.
+- **DNS:** the home router's DNS (192.168.0.1) drops queries, so a turn
+  failed with `getaddrinfo() returns 202` for Muse's server. `muse_dns.c`
+  puts 1.1.1.1 and 8.8.8.8 first (`CONFIG_MUSE_DNS_SERVERS`, set in this
+  board's overlay; `>dns_servers=` on the device wins) and the router's last,
+  on every lease and every 5 s, since a DHCP renewal sets the router's again
+  without an event. The chat connect also resolves its server with two quick
+  retries (0.3 s, 1 s) before a turn fails. `.local` names still go by mDNS.
 - **mDNS:** `.local` names are resolved through lwIP's one-shot query
   (`CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES`), so there's no mdns component.
 

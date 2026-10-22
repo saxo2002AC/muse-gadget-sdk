@@ -70,6 +70,7 @@ extern "C" {
 #include "muse_account_api.h"
 #include "muse_link.h"
 #include "muse_settings.h"
+#include "muse_resolve.h"
 #include "muse_tts.h"
 #include "muse_wifi.h"
 }
@@ -837,6 +838,12 @@ static bool connect_once(char *err, size_t err_cap, int *http_status)
     c.tls = esp_tls_init();
     if (!c.tls) {
         strlcpy(err, "Out of memory", err_cap);
+        return false;
+    }
+    /* A flaky DNS server: resolve with a couple of quick retries first, so
+     * esp-tls's own lookup hits lwIP's cache instead of failing the turn. */
+    if (!muse_resolve_warm(s_host)) {
+        snprintf(err, err_cap, "Can't resolve %s", s_host);
         return false;
     }
     esp_tls_cfg_t cfg = {};

@@ -19,13 +19,20 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "lwip/netdb.h"
+#include "freertos/task.h"
+#include "lwip/dns.h"
 #include "lwip/inet.h"
+#include "lwip/netdb.h"
+#include "lwip/priv/tcpip_priv.h"
+#include "muse_dns.h"
+#include "nvs.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "muse_resolve";
 
@@ -123,11 +130,192 @@ void muse_resolve_forget(const muse_url_t *url)
     ESP_LOGI(TAG, "%s: asking again next time", url->host);
 }
 
+/* ---- Our DNS servers ahead of the router's (muse_dns.h) ---- */
+
+#define DNS_NS "muse_dns"
+#define KEEP_US (5LL * 1000 * 1000)    /* DHCP renewals set the router's again, silently */
+
+static SemaphoreHandle_t s_dns_lock;
+static muse_dns_state_t s_dns;
+static esp_timer_handle_t s_dns_timer;
+
+/* The servers lwIP uses, read and set on its own thread. */
+typedef struct {
+    struct tcpip_api_call_data call;
+    uint32_t v[3];   /* host order, 0 for none */
+} dns_call_t;
+
+static err_t read_servers(struct tcpip_api_call_data *c)
+{
+    dns_call_t *d = (dns_call_t *)c;
+    for (int i = 0; i < 3; i++) {
+        const ip_addr_t *a = dns_getserver((u8_t)i);
+        d->v[i] = a && IP_IS_V4(a) ? lwip_ntohl(ip_2_ip4(a)->addr) : 0;
+    }
+    return ERR_OK;
+}
+
+static err_t write_servers(struct tcpip_api_call_data *c)
+{
+    dns_call_t *d = (dns_call_t *)c;
+    for (int i = 0; i < 3; i++) {
+        ip_addr_t a;
+        ip_addr_set_ip4_u32_val(a, lwip_htonl(d->v[i]));
+        dns_setserver((u8_t)i, d->v[i] ? &a : NULL);
+    }
+    return ERR_OK;
+}
+
+/* lwIP's thread and the event loop exist once an interface does: before
+ * that (Muse can start first) a call into lwIP would wait on a queue that
+ * isn't there. The count is a plain read, no call into lwIP. */
+static bool net_up(void)
+{
+    return esp_netif_get_nr_of_ifs() > 0;
+}
+
+static void dns_keep(void)
+{
+    if (!s_dns_lock || !net_up()) {
+        return;
+    }
+    dns_call_t now = { 0 };
+    if (tcpip_api_call(read_servers, &now.call) != ERR_OK) {
+        return;
+    }
+    dns_call_t want = { 0 };
+    xSemaphoreTake(s_dns_lock, portMAX_DELAY);
+    bool apply = muse_dns_step(&s_dns, now.v, want.v);
+    xSemaphoreGive(s_dns_lock);
+    if (apply) {
+        tcpip_api_call(write_servers, &want.call);
+        char a[3 * 16 + 4];
+        muse_dns_format(want.v, want.v[2] ? 3 : want.v[1] ? 2 : 1, a, sizeof(a));
+        ESP_LOGI(TAG, "DNS servers: %s", a);
+    }
+}
+
+static void on_got_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)id;
+    (void)data;
+    dns_keep();   /* a new lease: DHCP just set the router's */
+}
+
+static void on_keep_timer(void *arg)
+{
+    (void)arg;
+    static bool registered;
+    if (!registered && net_up()) {
+        /* The default event loop is up by now: hear each new lease at once. */
+        registered = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_got_ip, NULL, NULL) ==
+                     ESP_OK;
+    }
+    dns_keep();
+}
+
+/* Ours: NVS if ever set (empty there means the router's only), else Kconfig. */
+static void load_dns(uint32_t ours[MUSE_DNS_MAX], int *n)
+{
+    char text[MUSE_DNS_TEXT];
+    strlcpy(text, CONFIG_MUSE_DNS_SERVERS, sizeof(text));
+    nvs_handle_t h;
+    if (nvs_open(DNS_NS, NVS_READONLY, &h) == ESP_OK) {
+        char saved[MUSE_DNS_TEXT];
+        size_t len = sizeof(saved);
+        if (nvs_get_str(h, "servers", saved, &len) == ESP_OK) {
+            strlcpy(text, saved, sizeof(text));
+        }
+        nvs_close(h);
+    }
+    if (!muse_dns_parse(text, ours, n)) {
+        ESP_LOGW(TAG, "DNS servers \"%s\" aren't a list of IPv4 addresses; using the router's", text);
+        *n = 0;
+    }
+}
+
+void muse_dns_start(void)
+{
+    if (s_dns_lock) {
+        return;
+    }
+    uint32_t ours[MUSE_DNS_MAX];
+    int n;
+    load_dns(ours, &n);
+    muse_dns_init(&s_dns, ours, n);
+    s_dns_lock = xSemaphoreCreateMutex();
+    const esp_timer_create_args_t t = { .callback = on_keep_timer, .name = "dns_keep" };
+    if (esp_timer_create(&t, &s_dns_timer) == ESP_OK) {
+        esp_timer_start_periodic(s_dns_timer, KEEP_US);
+    }
+    char text[MUSE_DNS_TEXT];
+    muse_dns_format(ours, n, text, sizeof(text));
+    ESP_LOGI(TAG, "DNS: %s, then the router's", n ? text : "the router's only");
+}
+
+bool muse_resolve_warm(const char *host)
+{
+    static const int WAIT_MS[] = { 0, 300, 1000 };
+    for (int i = 0; i < 3; i++) {
+        if (WAIT_MS[i]) {
+            vTaskDelay(pdMS_TO_TICKS(WAIT_MS[i]));
+        }
+        const struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
+        struct addrinfo *res = NULL;
+        int err = getaddrinfo(host, NULL, &hints, &res);
+        if (res) {
+            freeaddrinfo(res);
+        }
+        if (!err) {
+            return true;   /* lwIP has it cached for esp-tls's own lookup */
+        }
+        ESP_LOGW(TAG, "can't resolve %s (%d), try %d of 3", host, err, i + 1);
+    }
+    return false;
+}
+
+static bool dns_servers_command(const char *v)
+{
+    uint32_t ours[MUSE_DNS_MAX];
+    int n;
+    if (strlen(v) >= MUSE_DNS_TEXT || !muse_dns_parse(v, ours, &n)) {
+        printf("@dns_servers error invalid (want a.b.c.d[,a.b.c.d], or empty for the router's)\n");
+        fflush(stdout);
+        return true;
+    }
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(DNS_NS, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        err = nvs_set_str(h, "servers", v);
+        err = err == ESP_OK ? nvs_commit(h) : err;
+        nvs_close(h);
+    }
+    if (err != ESP_OK) {
+        printf("@dns_servers error storage\n");
+        fflush(stdout);
+        return true;
+    }
+    if (s_dns_lock) {
+        xSemaphoreTake(s_dns_lock, portMAX_DELAY);
+        muse_dns_set(&s_dns, ours, n);
+        xSemaphoreGive(s_dns_lock);
+        dns_keep();
+    }
+    printf("@dns_servers ok\n");
+    fflush(stdout);
+    return true;
+}
+
 /* >dns=NAME: looks NAME up as esp-tls does (any family) and prints the
  * answer, how long it took, the DNS servers in use and how often a server
  * address was forgotten. A diagnostic for the serial console. */
 bool muse_resolve_console_command(const char *line)
 {
+    if (!strncmp(line, "dns_servers=", 12)) {
+        return dns_servers_command(line + 12);
+    }
     if (strncmp(line, "dns=", 4) != 0) {
         return false;
     }
@@ -137,16 +325,19 @@ bool muse_resolve_console_command(const char *line)
         fflush(stdout);
         return true;
     }
-    char servers[3][INET6_ADDRSTRLEN] = { "", "", "" };
-    esp_netif_t *netif = esp_netif_get_default_netif();
-    static const esp_netif_dns_type_t TYPES[3] = { ESP_NETIF_DNS_MAIN, ESP_NETIF_DNS_BACKUP, ESP_NETIF_DNS_FALLBACK };
-    for (int i = 0; i < 3 && netif; i++) {
-        esp_netif_dns_info_t info;
-        if (esp_netif_get_dns_info(netif, TYPES[i], &info) == ESP_OK) {
-            if (info.ip.type == ESP_IPADDR_TYPE_V4) {
-                esp_ip4addr_ntoa(&info.ip.u_addr.ip4, servers[i], sizeof(servers[i]));
-            }
-        }
+    dns_call_t now = { 0 };
+    if (net_up()) {
+        tcpip_api_call(read_servers, &now.call);
+    }
+    char servers[3][16];
+    for (int i = 0; i < 3; i++) {
+        muse_dns_format(&now.v[i], now.v[i] ? 1 : 0, servers[i], sizeof(servers[i]));
+    }
+    char ours[MUSE_DNS_TEXT] = "";
+    if (s_dns_lock) {
+        xSemaphoreTake(s_dns_lock, portMAX_DELAY);
+        muse_dns_format(s_dns.ours, s_dns.n, ours, sizeof(ours));
+        xSemaphoreGive(s_dns_lock);
     }
     const struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
     struct addrinfo *res = NULL;
@@ -172,7 +363,8 @@ bool muse_resolve_console_command(const char *line)
     } else {
         printf("@dns {\"name\":\"%s\",\"error\":%d,\"ms\":%d", name, err ? err : -1, ms);
     }
-    printf(",\"servers\":[\"%s\",\"%s\",\"%s\"],\"forgets\":%d}\n", servers[0], servers[1], servers[2], forgets);
+    printf(",\"servers\":[\"%s\",\"%s\",\"%s\"],\"ours\":\"%s\",\"forgets\":%d}\n", servers[0], servers[1],
+           servers[2], ours, forgets);
     fflush(stdout);
     return true;
 }

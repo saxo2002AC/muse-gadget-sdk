@@ -256,6 +256,18 @@ menu "Muse"
             health from a Guardián server on the local network, and its status
             screens. Landscape boards only (480x320): the ES3C40P turns it on.
 
+    config MUSE_DNS_SERVERS
+        string "DNS servers ahead of the router's"
+        depends on MUSE_HATCH
+        default ""
+        help
+            Up to two IPv4 DNS servers, comma-separated (1.1.1.1,8.8.8.8), used
+            before the one DHCP hands out, which stays as the last resort. For
+            a router whose DNS drops queries: Muse's server name then fails to
+            resolve and a turn fails. Empty uses the router's only. The serial
+            console's ">dns_servers=" sets it on the device instead, kept in
+            NVS, which wins over this. .local names (mDNS) aren't affected.
+
     config MUSE_TTS_URL
         string "TTS server URL for spoken replies"
         depends on MUSE_HATCH
