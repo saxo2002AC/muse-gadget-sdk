@@ -41,6 +41,7 @@
 #include "muse_menu.h"
 #include "muse_pixel.h"
 #if CONFIG_MUSE_JOLLY
+#include "jolly/jolly_alarm.h"
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_eyes.h"
 #include "jolly/jolly_imu.h"
@@ -545,6 +546,8 @@ static void on_canvas_clicked(lv_event_t *e)
 static int64_t s_pet_until_ms, s_feliz_until_ms, s_surprise_until_ms, s_wink_until_ms;
 static jolly_level_t s_prev_level = JLV_OK;
 static jolly_glance_t s_glance;   /* the latest, copied each frame: not on the LVGL task's stack */
+static jolly_alarm_t s_alarm;      /* a new crit alarms for a while, a standing one doesn't */
+static int32_t s_alarm_seq = -1;
 
 /* A pat on Jolly's eyes: cariño for a moment (the heart is the eyes' own). */
 static void on_jolly_pet(void)
@@ -574,6 +577,11 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         s_wink_until_ms = jolly_mood_wink_until(s_prev_level, level, now, s_wink_until_ms);
         s_surprise_until_ms = jolly_mood_surprise_until(s_prev_level, level, now, s_surprise_until_ms);
         s_prev_level = level;
+        if (s_glance.seq != s_alarm_seq) {   /* each fresh glance once */
+            s_alarm_seq = s_glance.seq;
+            jolly_alarm_obs_t obs = { .level = level, .sec = s_glance.sec.level, .crit = s_glance.crit };
+            jolly_alarm_feed(&s_alarm, &obs, now, jolly_client_alarm_s());
+        }
     }
     if (jolly_eyes_holding() && mode != MUSE_MODE_THINKING && mode != MUSE_MODE_SPEAKING) {
         mode = MUSE_MODE_LISTENING;   /* held: Jolly listens, whatever Muse is doing yet */
@@ -583,6 +591,7 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         .quiet = have && s_glance.quiet, .now_ms = now, .pet_until_ms = s_pet_until_ms,
         .feliz_until_ms = s_feliz_until_ms, .motion = jolly_imu_mood(now),
         .surprise_until_ms = s_surprise_until_ms, .wink_until_ms = s_wink_until_ms,
+        .alarm = jolly_alarm_mood(&s_alarm, now),
     };
     jolly_eyes_set_mood(jolly_mood_pick(&in));
     static uint32_t s_flashes;

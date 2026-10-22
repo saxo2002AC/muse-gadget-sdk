@@ -15,8 +15,10 @@
  */
 
 #include "jolly/jolly_client.h"
+#include "jolly/jolly_alarm.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -56,6 +58,7 @@ static SemaphoreHandle_t s_lock;   /* everything below */
 static bool s_loaded;
 EXT_RAM_BSS_ATTR static char s_url[URL_MAX];
 EXT_RAM_BSS_ATTR static char s_key[KEY_MAX];
+static int32_t s_alarm_s = JOLLY_ALARM_DEFAULT_S;   /* >grd_alarm_s= */
 
 static TaskHandle_t s_task;
 static char *s_body;               /* BODY_MAX + 1, PSRAM */
@@ -105,6 +108,8 @@ static void load_locked(void)
         if (nvs_get_str(h, "key", s_key, &n) != ESP_OK) {
             s_key[0] = '\0';
         }
+        int32_t a;
+        s_alarm_s = nvs_get_i32(h, "alarm_s", &a) == ESP_OK && jolly_alarm_s_ok(a) ? a : JOLLY_ALARM_DEFAULT_S;
         nvs_close(h);
     }
     s_loaded = true;
@@ -204,11 +209,36 @@ bool jolly_client_console_command(const char *line)
         }
         return true;
     }
+    if (!strncmp(line, "grd_alarm_s=", 12)) {
+        /* How long a new crit keeps Jolly alarmed, 0..3600 s (jolly_alarm.h). */
+        const char *v = line + 12;
+        char *end = NULL;
+        long s = strtol(v, &end, 10);
+        if (!*v || *end || !jolly_alarm_s_ok((int32_t)s) || strlen(v) > 4) {
+            answer("grd_alarm_s", "invalid (want 0..3600)");
+            return true;
+        }
+        lock();
+        load_locked();
+        nvs_handle_t h;
+        esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+        if (err == ESP_OK) {
+            err = nvs_set_i32(h, "alarm_s", (int32_t)s);
+            err = err == ESP_OK ? nvs_commit(h) : err;
+            nvs_close(h);
+        }
+        if (err == ESP_OK) {
+            s_alarm_s = (int32_t)s;
+        }
+        unlock();
+        answer("grd_alarm_s", err == ESP_OK ? NULL : "storage");
+        return true;
+    }
     if (!strcmp(line, "grd")) {
         lock();
         load_locked();
-        printf("@grd {\"url\":\"%s\",\"key_len\":%u,\"link\":\"%s\",\"glance\":%s}\n", s_url,
-               (unsigned)strlen(s_key), link_name(s_link.link), s_have_glance ? "true" : "false");
+        printf("@grd {\"url\":\"%s\",\"key_len\":%u,\"link\":\"%s\",\"glance\":%s,\"alarm_s\":%d}\n", s_url,
+               (unsigned)strlen(s_key), link_name(s_link.link), s_have_glance ? "true" : "false", (int)s_alarm_s);
         unlock();
         fflush(stdout);
         return true;
@@ -465,6 +495,15 @@ void jolly_client_start(void)
         ESP_LOGE(TAG, "start failed: no Guardián");
         s_task = NULL;
     }
+}
+
+int32_t jolly_client_alarm_s(void)
+{
+    lock();
+    load_locked();
+    int32_t s = s_alarm_s;
+    unlock();
+    return s;
 }
 
 bool jolly_client_snapshot(jolly_glance_t *glance, jolly_linkstate_t *link)

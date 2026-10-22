@@ -37,6 +37,7 @@ static void each_rule(void)
     }
     in = base();
     in.level = JLV_CRIT;
+    in.alarm = JM_ALERTA;                    /* a new crit, alarming (jolly_alarm.h) */
     assert(jolly_mood_pick(&in) == JM_ALERTA);
     in = base();
     in.sec_level = JLV_WARN;
@@ -63,7 +64,10 @@ static void news(void)
     jolly_mood_in_t in = base();
     in.surprise_until_ms = in.now_ms + 1000;
     in.level = JLV_CRIT;
-    assert(jolly_mood_pick(&in) == JM_ALERTA);          /* crit beats surprise */
+    in.alarm = JM_ALERTA;
+    assert(jolly_mood_pick(&in) == JM_ALERTA);          /* an alarm beats surprise */
+    in.alarm = JM_TRANQUILO;
+    assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);     /* a standing crit doesn't */
     in.level = JLV_WARN;
     in.sec_level = JLV_WARN;
     assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);     /* surprise beats espía */
@@ -107,9 +111,11 @@ static void precedence(void)
     in = base();                             /* disconnected_beats_crit */
     in.link = JL_STALE;
     in.level = JLV_CRIT;
+    in.alarm = JM_ALERTA;
     assert(jolly_mood_pick(&in) == JM_DESCONECTADO);
     in = base();                             /* crit_beats_spy */
     in.level = JLV_CRIT;
+    in.alarm = JM_ALERTA;
     in.sec_level = JLV_WARN;
     assert(jolly_mood_pick(&in) == JM_ALERTA);
     in = base();                             /* spy beats feliz and quiet */
@@ -148,8 +154,33 @@ static void timers(void)
     assert(jolly_mood_pet_until(5000) == 5000 + JOLLY_PET_MS);
 }
 
+/* Andrés's rule: a standing crit calms down. Only a new one alarms; a
+ * standing one glances once an hour (jolly_alarm.h decides which). */
+static void standing_crit(void)
+{
+    jolly_mood_in_t in = base();
+    in.level = JLV_CRIT;                     /* the backup, crit for days */
+    assert(jolly_mood_pick(&in) == JM_TRANQUILO);
+    in.sec_level = JLV_CRIT;                 /* a standing security crit isn't espía all day */
+    assert(jolly_mood_pick(&in) == JM_TRANQUILO);
+    in.alarm = JM_ESPIA;                     /* its hourly glance */
+    assert(jolly_mood_pick(&in) == JM_ESPIA);
+    in.sec_level = JLV_OK;
+    in.alarm = JM_SORPRENDIDO;
+    assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);
+    in.alarm = JM_TRANQUILO;
+    in.feliz_until_ms = in.now_ms + 1;       /* the rest of the moods are back */
+    assert(jolly_mood_pick(&in) == JM_FELIZ);
+    in = base();
+    in.sec_level = JLV_WARN;                 /* a security warning is still espía */
+    assert(jolly_mood_pick(&in) == JM_ESPIA);
+    in.alarm = JM_SORPRENDIDO;               /* a reminder glance beats it */
+    assert(jolly_mood_pick(&in) == JM_SORPRENDIDO);
+}
+
 int main(void)
 {
+    standing_crit();
     each_rule();
     precedence();
     timers();

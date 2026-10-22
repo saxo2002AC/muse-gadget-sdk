@@ -142,13 +142,26 @@ static void tone_colors(jolly_tone_t tone, uint32_t *bg, uint32_t *fg)
     *fg = FG[tone];
 }
 
+/* A tap on the chip opens the page that explains it: Seguridad for a
+ * security warning or crit, else Mac Mini. */
+static int s_first_col = 1;        /* the Mac Mini page's tileview column */
+
+static void on_chip(lv_event_t *e)
+{
+    (void)e;
+    bool sec = s_have && s_g.sec.level >= JLV_WARN;
+    muse_ui_show_tile(s_first_col + (sec ? 3 : 0));
+}
+
 static chip_t chip(lv_obj_t *parent)
 {
     chip_t c = { .tone = -1 };
     c.bg = lv_obj_create(parent);
     lv_obj_remove_style_all(c.bg);
-    lv_obj_remove_flag(c.bg, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(c.bg, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(c.bg, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(c.bg, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(c.bg, 10);   /* 22 px tall: easier to hit */
+    lv_obj_add_event_cb(c.bg, on_chip, LV_EVENT_CLICKED, NULL);
     lv_obj_set_size(c.bg, LV_SIZE_CONTENT, 22);
     lv_obj_set_style_radius(c.bg, 11, 0);
     lv_obj_set_style_bg_opa(c.bg, LV_OPA_COVER, 0);
@@ -830,6 +843,7 @@ static void update_sec(bool entering)
 
 void jolly_pages_create(lv_obj_t *tv, int first_col)
 {
+    s_first_col = first_col;
     build_mac(page_tile(tv, first_col));
     build_apps(page_tile(tv, first_col + 1));
     build_net(page_tile(tv, first_col + 2));

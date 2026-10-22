@@ -61,12 +61,16 @@ typedef struct {
     jolly_mood_t motion;      /* what the IMU asks for (jolly_motion.h); JM_TRANQUILO for nothing */
     int64_t surprise_until_ms;   /* sorprendido until then (jolly_mood_surprise_until) */
     int64_t wink_until_ms;       /* guiño until then (jolly_mood_wink_until) */
+    jolly_mood_t alarm;          /* jolly_alarm_mood(): JM_ALERTA for a new crit, a reminder's
+                                  * JM_ESPIA or JM_SORPRENDIDO, else JM_TRANQUILO */
 } jolly_mood_in_t;
 
-/* The mood, first match wins: voice, pat, a motion mood (unless a current
- * crit: security still wins over play), no link, crit, the level just
- * worsened (sorprendido), a security warning, a warning just cleared (guiño),
- * a crit just cleared (feliz), quiet hours, else tranquilo. An ops warning alone stays
+/* The mood, first match wins: voice, pat, a motion mood (unless a crit is
+ * alarming: security still wins over play), no link, a crit alarming (only a
+ * new one, for a while: jolly_alarm.h), the level just worsened
+ * (sorprendido), a standing crit's hourly glance, a security warning (espía),
+ * a warning just cleared (guiño), a crit just cleared (feliz), quiet hours,
+ * else tranquilo. A standing crit shows on the chip, not on the face. An ops warning alone stays
  * tranquilo (its count shows on the screen instead). */
 jolly_mood_t jolly_mood_pick(const jolly_mood_in_t *in);
 

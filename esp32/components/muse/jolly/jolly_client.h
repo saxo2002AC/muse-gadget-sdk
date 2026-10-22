@@ -52,6 +52,9 @@ bool jolly_client_console_command(const char *line);
  * has arrived yet; *link is filled either way. */
 bool jolly_client_snapshot(jolly_glance_t *glance, jolly_linkstate_t *link);
 
+/* How long a new crit alarms, seconds (>grd_alarm_s=, NVS; jolly_alarm.h). */
+int32_t jolly_client_alarm_s(void);
+
 /* Which optional endpoints to poll (JOLLY_WANT_*), for the visible page. */
 void jolly_client_want(unsigned mask);
 

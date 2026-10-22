@@ -151,10 +151,13 @@ static void arbiter(void)
     jolly_mood_in_t in = { .voice = MUSE_MODE_IDLE, .link = JL_OK, .level = JLV_OK, .sec_level = JLV_OK,
                            .now_ms = 1000, .motion = JM_MAREADO };
     assert(jolly_mood_pick(&in) == JM_MAREADO);
-    in.level = JLV_CRIT;                        /* a current crit wins over play */
+    in.level = JLV_CRIT;                        /* a standing crit doesn't win over play */
+    assert(jolly_mood_pick(&in) == JM_MAREADO);
+    in.alarm = JM_ALERTA;                       /* an alarming one does */
     assert(jolly_mood_pick(&in) == JM_ALERTA);
     in.link = JL_UNREACHABLE;                   /* a stale one doesn't */
     assert(jolly_mood_pick(&in) == JM_MAREADO);
+    in.alarm = JM_TRANQUILO;
     in.level = JLV_OK;
     in.sec_level = JLV_WARN;
     in.quiet = true;

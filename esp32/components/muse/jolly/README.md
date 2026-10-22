@@ -15,6 +15,7 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 |---|---|---|
 | `../boards/es3c40p_orient.c` | landscape MADCTL and touch remap | `tests/jolly/test_orient.c` |
 | `jolly_mood.c` | the mood, first match wins (plan §1.9) | `tests/jolly/test_mood.c` |
+| `jolly_alarm.c` | a new crit alarms for a while, a standing one only reminds | `tests/jolly/test_alarm.c` |
 | `jolly_face_spec.c` | face v5 as numbers: 16 moods, visemes, springs, blinks, head turn, mouth lines | `tests/jolly/test_face.c` |
 | `jolly_eyes.c` | draws face v5 from those numbers, per frame | simulator, `tools/jolly/face_sheet.py` |
 | `jolly_glance.c` | strict contract parsers, ETag check, link state (§1.8) | `tests/jolly/test_glance.c` |
@@ -32,7 +33,8 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 ```
 >grd_url=http://Mac-mini-de-acserver.local:3025    the Guardián (or http://IPv4:port)
 >grd_key=<key>                                     X-Guardian-Key; never printed or logged
->grd                                               URL, key length, link, whether a glance arrived
+>grd_alarm_s=180                                   how long a new crit alarms, 0..3600 s (security: 10 min)
+>grd                                               URL, key length, link, whether a glance arrived, alarm_s
 >lcd / >lcd_orient=0|1 / >lcd_madctl=S,X,Y / >lcd_touchlog=1
 >tts_url=http://Mac-mini-de-acserver.local:3024 / >tts_key=...
 >dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, forgets}
@@ -152,10 +154,22 @@ brows and mouth redraw, when they move a whole pixel. Moods that jitter
 (alerta, enojado, asustado, mareado) or laugh (feliz) redraw their parts every
 frame, as the mockup moves them.
 
-**Arbiter.** Voice, then a pat (cariño), then motion (unless a current crit),
-no link (desconectado), crit (alerta), the level just worsened (sorprendido,
-2 s), a security warning (espía), a warning just cleared (guiño, 2.4 s), a crit
-just cleared (feliz, 4 s), quiet hours (durmiendo), else tranquilo.
+**Arbiter.** Voice, then a pat (cariño), then motion (unless a crit is
+alarming), no link (desconectado), an alarming crit (alerta), the level just
+worsened (sorprendido, 2 s), a standing crit's hourly glance, a security
+warning (espía), a warning just cleared (guiño, 2.4 s), a crit just cleared
+(feliz, 4 s), quiet hours (durmiendo), else tranquilo.
+
+**Alarms** (`jolly_alarm.c`, Andrés's rule). Only a *new* crit makes Jolly
+alerta: the crit count going up, the level reaching crit, or the security
+level reaching crit. It lasts `>grd_alarm_s=` seconds (default 180, 0..3600),
+10 min for a security crit, then the face calms down while the chip stays red
+("N crítica(s)"). A crit that stands (a backup crit for days) never alarms
+again; once an hour it gets a 4 s glance, espía for a security crit,
+sorprendido otherwise. A crit already open at boot alarms 30 s at most. The
+glance has no alert ids and its headline changes for the same alert ("10
+días", "11 días"), so neither counts as new. A tap on the chip opens the page
+that explains it: Seguridad for a security warning or crit, else Mac Mini.
 
 **Not from the mockup:** the whole face's tilt (mareado's and the eye
 rotation by gaze) and the frame's shaking and tossing, which only show the

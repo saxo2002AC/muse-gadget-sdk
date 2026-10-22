@@ -31,20 +31,23 @@ jolly_mood_t jolly_mood_pick(const jolly_mood_in_t *in)
     if (in->now_ms < in->pet_until_ms) {
         return JM_CARINO;
     }
-    bool current_crit = in->link == JL_OK && in->level == JLV_CRIT;
-    if (in->motion != JM_TRANQUILO && in->motion < JM_COUNT && !current_crit) {
+    bool alarming = in->link == JL_OK && in->alarm == JM_ALERTA;
+    if (in->motion != JM_TRANQUILO && in->motion < JM_COUNT && !alarming) {
         return in->motion;
     }
     if (in->link != JL_OK) {
         return JM_DESCONECTADO;
     }
-    if (in->level == JLV_CRIT) {
+    if (alarming) {
         return JM_ALERTA;
     }
     if (in->now_ms < in->surprise_until_ms) {
         return JM_SORPRENDIDO;
     }
-    if (in->sec_level >= JLV_WARN) {
+    if (in->alarm == JM_ESPIA || in->alarm == JM_SORPRENDIDO) {
+        return in->alarm;   /* a standing crit's hourly glance */
+    }
+    if (in->sec_level == JLV_WARN) {
         return JM_ESPIA;
     }
     if (in->now_ms < in->wink_until_ms) {
