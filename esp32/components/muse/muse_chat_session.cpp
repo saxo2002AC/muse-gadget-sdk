@@ -183,7 +183,8 @@ static conn_t s_conn;
 static bool s_connected;
 static muse_hatch_vm_t s_vm;       /* cached per-VM credentials */
 static bool s_vm_direct;           /* s_vm.vm_token is the device token itself */
-static char s_host[MUSE_HOST_MAX + 1];
+static char s_host[MUSE_HOST_MAX + 1];   /* the host alone: no port, no brackets */
+static int s_port = NOISE_PORT;
 /* When to connect without a turn asking: once Wi-Fi is up, again with backoff
  * if that fails or the connection drops, not after an idle close. */
 static int64_t s_auto_next_us;
@@ -542,7 +543,14 @@ static int ws_upgrade(esp_tls_t *tls, const char *vm_id, const char *token)
 {
     char id[3 * 128 + 1];
     query_escape(vm_id, id, sizeof(id));
-    size_t cap = 512 + strlen(id) + strlen(token) + strlen(s_host);
+    char host[MUSE_HOST_MAX + 10];   /* the Host header: [v6], and the port off 443 */
+    bool v6 = strchr(s_host, ':') != nullptr;
+    if (s_port == NOISE_PORT) {
+        snprintf(host, sizeof(host), v6 ? "[%s]" : "%s", s_host);
+    } else {
+        snprintf(host, sizeof(host), v6 ? "[%s]:%d" : "%s:%d", s_host, s_port);
+    }
+    size_t cap = 512 + strlen(id) + strlen(token) + strlen(host);
     char *req = static_cast<char *>(malloc(cap));
     if (!req) {
         return 0;
@@ -556,7 +564,7 @@ static int ws_upgrade(esp_tls_t *tls, const char *vm_id, const char *token)
                        "Sec-WebSocket-Version: 13\r\n"
                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
                        "\r\n",
-                       id, s_host, token);
+                       id, host, token);
     bool sent = write_all(tls, req, len);
     free(req);
     if (!sent) {
@@ -850,7 +858,7 @@ static bool connect_once(char *err, size_t err_cap, int *http_status)
     cfg.crt_bundle_attach = esp_crt_bundle_attach;
     cfg.timeout_ms = 15000;
     int64_t t0 = now_us();
-    if (esp_tls_conn_new_sync(s_host, strlen(s_host), NOISE_PORT, &cfg, c.tls) != 1) {
+    if (esp_tls_conn_new_sync(s_host, strlen(s_host), s_port, &cfg, c.tls) != 1) {
         snprintf(err, err_cap, "Can't reach %s", s_host);
         return false;
     }
@@ -900,6 +908,40 @@ static bool connect_once(char *err, size_t err_cap, int *http_status)
     return true;
 }
 
+/* Muse's server from the settings, as host and port. Logged once per value;
+ * a malformed one ("hatch.metaaivm.com:" made esp-tls look up the name with
+ * the colon) is read forgivingly or replaced by the default, with a warning. */
+static void pick_host(void)
+{
+    static char logged[MUSE_HOST_MAX + 1] = "\x01";
+    char raw[MUSE_HOST_MAX + 1];
+    muse_settings_hatch_host(raw);
+    bool clean = true;
+    bool ok = raw[0] && muse_host_port_parse(raw, NOISE_PORT, s_host, sizeof(s_host), &s_port, &clean);
+    if (!ok) {
+        strlcpy(s_host, "hatch.metaaivm.com", sizeof(s_host));
+        s_port = NOISE_PORT;
+    }
+    if (strcmp(logged, raw) != 0) {
+        strlcpy(logged, raw, sizeof(logged));
+        char shown[MUSE_HOST_MAX + 1];
+        size_t i = 0;
+        for (; raw[i] && i < sizeof(shown) - 1; i++) {
+            shown[i] = raw[i] < 0x20 || raw[i] > 0x7e ? '?' : raw[i];
+        }
+        shown[i] = '\0';
+        if (!raw[0]) {
+            ESP_LOGI(TAG, "server: default, %s:%d", s_host, s_port);
+        } else if (!ok) {
+            ESP_LOGW(TAG, "server \"%s\" isn't host[:port]; using %s:%d", shown, s_host, s_port);
+        } else if (!clean) {
+            ESP_LOGW(TAG, "server \"%s\" is malformed; using %s:%d", shown, s_host, s_port);
+        } else {
+            ESP_LOGI(TAG, "server \"%s\": %s:%d", shown, s_host, s_port);
+        }
+    }
+}
+
 static bool ensure_connected(void)
 {
     if (s_connected) {
@@ -909,10 +951,7 @@ static bool ensure_connected(void)
         return false;
     }
     muse_hatch_report(MUSE_HATCH_TESTING, "Connecting...");
-    muse_settings_hatch_host(s_host);
-    if (!s_host[0]) {
-        strlcpy(s_host, "hatch.metaaivm.com", sizeof(s_host));
-    }
+    pick_host();
     char err[48] = "";
     for (int attempt = 0; attempt < 2; attempt++) {
         if (!resolve_vm(err, sizeof(err))) {

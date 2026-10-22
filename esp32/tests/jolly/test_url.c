@@ -60,8 +60,50 @@ static void dns_names(void)
     assert(muse_dns_name_ok(longname));
 }
 
+/* muse_host_port_parse: Muse's server as stored ("host", "host:port"), read
+ * forgivingly: a trailing ':' (an empty port) means the default. */
+static void host_port(const char *in, bool ok_want, const char *host_want, int port_want, bool clean_want)
+{
+    char host[64];
+    int port = -1;
+    bool clean = !clean_want;
+    bool ok = muse_host_port_parse(in, 443, host, sizeof(host), &port, &clean);
+    if (ok != ok_want || (ok && (strcmp(host, host_want) || port != port_want || clean != clean_want))) {
+        fprintf(stderr, "%s: ok %d host '%s' port %d clean %d\n", in, ok, ok ? host : "", port, clean);
+        assert(0);
+    }
+}
+
+static void host_ports(void)
+{
+    host_port("hatch.metaaivm.com:", true, "hatch.metaaivm.com", 443, false);      /* Andrés's board */
+    host_port("hatch.metaaivm.com:443", true, "hatch.metaaivm.com", 443, true);
+    host_port("hatch.metaaivm.com", true, "hatch.metaaivm.com", 443, true);
+    host_port("[::1]:443", true, "::1", 443, true);
+    host_port("[::1]", true, "::1", 443, true);
+    host_port("[::1]:", true, "::1", 443, false);
+    host_port("example.org:8443", true, "example.org", 8443, true);
+    host_port(" hatch.metaaivm.com ", true, "hatch.metaaivm.com", 443, false);   /* stray spaces */
+    host_port("10.0.0.5:9000", true, "10.0.0.5", 9000, true);
+    host_port("", false, "", 0, true);
+    host_port(":", false, "", 0, true);
+    host_port(":443", false, "", 0, true);
+    host_port("host:0", false, "", 0, true);
+    host_port("host:65536", false, "", 0, true);
+    host_port("host:44a", false, "", 0, true);
+    host_port("ho st", false, "", 0, true);
+    host_port("[::1", false, "", 0, true);
+    host_port("::1", false, "", 0, true);                 /* IPv6 needs brackets */
+    host_port("https://hatch.metaaivm.com", false, "", 0, true);
+    char longer[80];
+    memset(longer, 'a', 70);
+    longer[70] = '\0';
+    host_port(longer, false, "", 0, true);               /* too long for the buffer */
+}
+
 int main(void)
 {
+    host_ports();
     dns_names();
     ok("http://192.168.0.11:3024", "192.168.0.11", 3024, false);
     ok("http://0.0.0.0:1", "0.0.0.0", 1, false);

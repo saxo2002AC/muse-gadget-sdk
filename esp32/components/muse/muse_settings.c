@@ -16,6 +16,7 @@
 
 #include "muse_settings.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -25,6 +26,11 @@
 #include "nvs_flash.h"
 
 #include "muse_link.h"
+#if CONFIG_MUSE_HATCH
+#include "muse_url.h"
+#endif
+
+static bool canon_host(char *h, size_t cap);
 
 static const char *TAG = "muse_settings";
 
@@ -130,6 +136,9 @@ esp_err_t muse_settings_init(void)
     load_str("ssid", s.ssid, sizeof(s.ssid));
     load_str("pass", s.pass, sizeof(s.pass));
     load_str("host", s.host, sizeof(s.host));
+    if (canon_host(s.host, sizeof(s.host))) {
+        save_str("host", s.host);
+    }
     load_str("vm", s.vm, sizeof(s.vm));
     load_str("token", s.token, sizeof(s.token));
 
@@ -167,6 +176,34 @@ void muse_settings_wifi(char ssid[MUSE_SSID_MAX + 1], char pass[MUSE_PASS_MAX + 
             strlcpy(pass, s.pass, MUSE_PASS_MAX + 1);
         }
     });
+}
+
+/* Muse's server, made canonical: "host", or "host:port" off 443. A stray
+ * trailing ':' ("hatch.metaaivm.com:", seen on the ES3C40P) or spaces made
+ * every connect fail; they're dropped, with a warning. True if it changed. */
+static bool canon_host(char *h, size_t cap)
+{
+#if CONFIG_MUSE_HATCH
+    char host[MUSE_HOST_MAX + 1];
+    int port;
+    bool clean;
+    if (!h[0] || !muse_host_port_parse(h, 443, host, sizeof(host), &port, &clean) || clean) {
+        return false;
+    }
+    char was[MUSE_HOST_MAX + 1];
+    strlcpy(was, h, sizeof(was));
+    if (port == 443) {
+        snprintf(h, cap, strchr(host, ':') ? "[%s]" : "%s", host);
+    } else {
+        snprintf(h, cap, strchr(host, ':') ? "[%s]:%d" : "%s:%d", host, port);
+    }
+    ESP_LOGW(TAG, "Muse server \"%s\" was malformed; now \"%s\"", was, h);
+    return true;
+#else
+    (void)h;
+    (void)cap;
+    return false;
+#endif
 }
 
 void muse_settings_hatch_host(char out[MUSE_HOST_MAX + 1])
@@ -262,6 +299,7 @@ void muse_settings_set_hatch_host(const char *host)
 {
     LOCKED({
         strlcpy(s.host, host && host[0] ? host : DEFAULT_HOST, sizeof(s.host));
+        canon_host(s.host, sizeof(s.host));
         save_str("host", s.host);
     });
     notify(MUSE_SETTING_HATCH);

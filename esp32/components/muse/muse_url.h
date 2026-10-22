@@ -17,6 +17,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +46,13 @@ bool muse_url_parse(const char *url, muse_url_t *out);
  * letters, digits and inner hyphens, 1 to 63 long, dot-separated, at most 253
  * in all. */
 bool muse_dns_name_ok(const char *name);
+
+/* Muse's server as stored, "host" or "host:port" ("[v6]:port" for IPv6),
+ * read forgivingly: spaces around it and a trailing ':' with no port are
+ * dropped (`clean` false says so), and no port means `default_port`. The
+ * host is letters, digits, '-' and '.' (hex, ':' and '.' in brackets), and
+ * must fit `cap`. False for anything else: a scheme, a path, port 0. */
+bool muse_host_port_parse(const char *in, int default_port, char *host, size_t cap, int *port, bool *clean);
 
 #ifdef __cplusplus
 }

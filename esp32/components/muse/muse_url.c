@@ -144,3 +144,70 @@ bool muse_dns_name_ok(const char *name)
     }
     return true;
 }
+
+bool muse_host_port_parse(const char *in, int default_port, char *host, size_t cap, int *port, bool *clean)
+{
+    const char *a = in, *b = in + strlen(in);
+    while (a < b && *a == ' ') {
+        a++;
+    }
+    while (b > a && b[-1] == ' ') {
+        b--;
+    }
+    *clean = a == in && *b == '\0';
+    const char *h0, *h1, *rest;   /* the host is [h0, h1); rest: ":port", ":" or nothing */
+    bool v6 = a < b && *a == '[';
+    if (v6) {
+        const char *close = memchr(a, ']', (size_t)(b - a));
+        if (!close) {
+            return false;
+        }
+        h0 = a + 1;
+        h1 = close;
+        rest = close + 1;
+    } else {
+        const char *colon = memchr(a, ':', (size_t)(b - a));
+        h0 = a;
+        h1 = colon ? colon : b;
+        rest = h1;
+        if (colon && memchr(colon + 1, ':', (size_t)(b - colon - 1))) {
+            return false;   /* a bare IPv6 address: it needs brackets */
+        }
+    }
+    size_t n = (size_t)(h1 - h0);
+    if (!n || n + 1 > cap) {
+        return false;
+    }
+    for (const char *c = h0; c < h1; c++) {
+        bool ok = v6 ? (is_alnum(*c) || *c == ':' || *c == '.') : (is_alnum(*c) || *c == '-' || *c == '.');
+        if (!ok) {
+            return false;
+        }
+    }
+    int p = default_port;
+    if (rest < b) {
+        if (*rest != ':') {
+            return false;
+        }
+        rest++;
+        if (rest == b) {
+            *clean = false;   /* "host:": an empty port */
+        } else {
+            long v = 0;
+            for (const char *c = rest; c < b; c++) {
+                if (!is_digit(*c) || v > 65535) {
+                    return false;
+                }
+                v = v * 10 + (*c - '0');
+            }
+            if (v < 1 || v > 65535) {
+                return false;
+            }
+            p = (int)v;
+        }
+    }
+    memcpy(host, h0, n);
+    host[n] = '\0';
+    *port = p;
+    return true;
+}
