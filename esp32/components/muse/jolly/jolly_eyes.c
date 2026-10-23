@@ -22,12 +22,16 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "esp_log.h"
+
 #if __has_include("esp_attr.h")
 #include "esp_attr.h"
 #endif
 #ifndef EXT_RAM_BSS_ATTR
 #define EXT_RAM_BSS_ATTR
 #endif
+
+static const char *TAG = "jolly_face";
 
 LV_FONT_DECLARE(jolly_font_20)
 LV_FONT_DECLARE(jolly_font_28)
@@ -377,8 +381,55 @@ static void make_eye(eye_t *e)
     e->still_since = 0;
 }
 
+/* While a finger is on the face, the tileview mustn't take it: LVGL would
+ * start a page scroll after a 10 px wiggle and end the press (PRESS_LOST),
+ * which ended the talk. The box stops chaining scrolls to its tile until the
+ * classifier calls it a swipe (JOLLY_MOVE_PX), or the touch is over. */
+static void tile_scroll(bool on)
+{
+    if (on) {
+        lv_obj_add_flag(s_box, LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    } else {
+        lv_obj_remove_flag(s_box, LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    }
+}
+
+static void on_gesture_ev(jolly_gesture_ev_t ev)
+{
+    switch (ev) {
+    case JG_TAP:
+        tile_scroll(true);
+        jolly_eyes_pet(s_gesture.x0, s_gesture.y0);
+        if (s_on_pet) {
+            s_on_pet();
+        }
+        break;
+    case JG_SWIPE:
+        tile_scroll(true);   /* the tileview takes it from here */
+        ESP_LOGI(TAG, "face: swipe, not a talk");
+        break;
+    case JG_HOLD_START:
+        ESP_LOGI(TAG, "face talk: press (held %d ms)", JOLLY_HOLD_MS);
+        if (s_on_hold) {
+            s_on_hold(true);
+        }
+        break;
+    case JG_HOLD_END:
+        tile_scroll(true);
+        ESP_LOGI(TAG, "face talk: release (%s, up %d ms)",
+                 jolly_gesture_end_reason(&s_gesture) == JGR_LOST ? "press_lost" : "released", JOLLY_RELEASE_MS);
+        if (s_on_hold) {
+            s_on_hold(false);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 /* Every touch on the face goes through the gesture classifier: a tap pets,
- * a hold talks, a swipe is the tileview's. */
+ * a hold talks, a swipe is the tileview's. The box itself never moves (the
+ * face's parts move inside it and take no touches). */
 static void on_box_event(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -392,26 +443,36 @@ static void on_box_event(lv_event_t *e)
         lv_indev_get_point(indev, &p);
     }
     lv_obj_get_coords(s_box, &a);
-    switch (jolly_gesture_feed(&s_gesture, sm, p.x - a.x1, p.y - a.y1, (int64_t)lv_tick_get())) {
-    case JG_TAP:
-        jolly_eyes_pet(s_gesture.x0, s_gesture.y0);
-        if (s_on_pet) {
-            s_on_pet();
-        }
-        break;
-    case JG_HOLD_START:
-        if (s_on_hold) {
-            s_on_hold(true);
-        }
-        break;
-    case JG_HOLD_END:
-        if (s_on_hold) {
-            s_on_hold(false);
-        }
-        break;
-    default:
-        break;
+    if (code == LV_EVENT_PRESSED && !jolly_gesture_down(&s_gesture)) {
+        tile_scroll(false);
     }
+    jolly_gesture_ev_t ev = jolly_gesture_feed(&s_gesture, sm, p.x - a.x1, p.y - a.y1, (int64_t)lv_tick_get());
+    if (sm != JGS_PRESSED && ev == JG_NONE && !jolly_gesture_holding(&s_gesture)) {
+        tile_scroll(true);   /* lost before a hold, or a swipe's end */
+    }
+    on_gesture_ev(ev);
+}
+
+/* A talk outlives the box's own events: after a lost press LVGL sends it
+ * nothing more, so the touch is read here, every frame, until it's over. */
+static void watch_held_touch(void)
+{
+    if (!jolly_gesture_holding(&s_gesture)) {
+        return;
+    }
+    lv_indev_t *indev = NULL;
+    while ((indev = lv_indev_get_next(indev)) && lv_indev_get_type(indev) != LV_INDEV_TYPE_POINTER) {
+    }
+    int64_t now = (int64_t)lv_tick_get();
+    if (indev) {
+        lv_point_t p;
+        lv_area_t a;
+        lv_indev_get_point(indev, &p);
+        lv_obj_get_coords(s_box, &a);
+        bool down = lv_indev_get_state(indev) == LV_INDEV_STATE_PRESSED;
+        jolly_gesture_feed(&s_gesture, down ? JGS_PRESSED : JGS_RELEASED, p.x - a.x1, p.y - a.y1, now);
+    }
+    on_gesture_ev(jolly_gesture_tick(&s_gesture, now));
 }
 
 bool jolly_eyes_holding(void)
@@ -421,7 +482,7 @@ bool jolly_eyes_holding(void)
 
 bool jolly_eyes_touched(void)
 {
-    return s_gesture.state != 0;   /* one word, written by the LVGL task: a stale read is harmless */
+    return jolly_gesture_down(&s_gesture);   /* one word, written by the LVGL task: a stale read is harmless */
 }
 
 static void apply_mood(jolly_mood_t m, bool snap);
@@ -1104,6 +1165,7 @@ void jolly_eyes_tick(int64_t now_ms, float level)
         return;
     }
     s_now = now_ms;
+    watch_held_touch();
     s_level = !isfinite(level) || level < 0 ? 0 : level > 1 ? 1 : level;   /* NaN would poison the springs */
     if (!s_t0) {
         s_t0 = now_ms;

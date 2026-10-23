@@ -16,13 +16,14 @@
 
 #include "jolly/jolly_gesture.h"
 
-enum { IDLE, DOWN, HOLDING, SWIPING };
+enum { IDLE, DOWN, HOLDING, RELEASING, SWIPING };
 
 void jolly_gesture_reset(jolly_gesture_t *g)
 {
     g->state = IDLE;
     g->x0 = g->y0 = 0;
-    g->t0 = 0;
+    g->t0 = g->t_up = 0;
+    g->reason = JGR_RELEASED;
 }
 
 static int32_t dist(int32_t a, int32_t b)
@@ -34,12 +35,25 @@ jolly_gesture_ev_t jolly_gesture_feed(jolly_gesture_t *g, jolly_gesture_sample_t
                                       int64_t now_ms)
 {
     if (s != JGS_PRESSED) {
-        int was = g->state;
-        g->state = IDLE;
-        if (was == HOLDING) {
-            return JG_HOLD_END;   /* lifted or taken: the talk ends either way */
+        switch (g->state) {
+        case DOWN:
+            g->state = IDLE;
+            return s == JGS_RELEASED ? JG_TAP : JG_NONE;   /* lost: the tileview took it */
+        case HOLDING:
+            /* Not over yet: a touch that blips up, or a press LVGL let go of
+             * while the finger stays, mustn't cut the turn. jolly_gesture_tick
+             * ends it once it has stayed up. */
+            g->state = RELEASING;
+            g->t_up = now_ms;
+            g->reason = s == JGS_LOST ? JGR_LOST : JGR_RELEASED;
+            return JG_NONE;
+        case RELEASING:
+            g->reason = s == JGS_LOST ? JGR_LOST : JGR_RELEASED;
+            return JG_NONE;
+        default:
+            g->state = IDLE;   /* a swipe's end, or a stray */
+            return JG_NONE;
         }
-        return was == DOWN && s == JGS_RELEASED ? JG_TAP : JG_NONE;
     }
     switch (g->state) {
     case IDLE:
@@ -51,19 +65,41 @@ jolly_gesture_ev_t jolly_gesture_feed(jolly_gesture_t *g, jolly_gesture_sample_t
     case DOWN:
         if (dist(x, g->x0) > JOLLY_MOVE_PX || dist(y, g->y0) > JOLLY_MOVE_PX) {
             g->state = SWIPING;
-            return JG_NONE;
+            return JG_SWIPE;
         }
         if (now_ms - g->t0 >= JOLLY_HOLD_MS) {
             g->state = HOLDING;
             return JG_HOLD_START;
         }
         return JG_NONE;
+    case RELEASING:
+        g->state = HOLDING;   /* down again: the talk goes on */
+        return JG_NONE;
     default:
-        return JG_NONE;   /* holding, or swiping: nothing new until it lifts */
+        return JG_NONE;       /* holding (never cancelled by moving), or swiping */
     }
+}
+
+jolly_gesture_ev_t jolly_gesture_tick(jolly_gesture_t *g, int64_t now_ms)
+{
+    if (g->state == RELEASING && now_ms - g->t_up >= JOLLY_RELEASE_MS) {
+        g->state = IDLE;
+        return JG_HOLD_END;
+    }
+    return JG_NONE;
 }
 
 bool jolly_gesture_holding(const jolly_gesture_t *g)
 {
-    return g->state == HOLDING;
+    return g->state == HOLDING || g->state == RELEASING;
+}
+
+bool jolly_gesture_down(const jolly_gesture_t *g)
+{
+    return g->state != IDLE;
+}
+
+jolly_gesture_reason_t jolly_gesture_end_reason(const jolly_gesture_t *g)
+{
+    return (jolly_gesture_reason_t)g->reason;
 }

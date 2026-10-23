@@ -186,9 +186,17 @@ its dark band (raised brows reach into it), and stays hidden while it's empty.
 ## Touch and motion
 
 - **Touch on the face** (`jolly_gesture.c`): a tap pets Jolly. A hold of 350 ms
-  without moving more than 20 px is push-to-talk, the BOOT key's path through
-  `muse_input_touch_talk()`, until the finger lifts; Jolly shows escuchando
-  meanwhile. Moving further first is a swipe to another page, so neither.
+  without moving more than 40 px is push-to-talk, the BOOT key's path through
+  `muse_input_touch_talk()`; Jolly shows escuchando meanwhile. Moving further
+  first is a swipe to another page. Once talking, moving never cancels it,
+  and it ends only when the finger has been up for 150 ms (a blip doesn't
+  end it). While a finger is down the face doesn't hand its scroll to the
+  tileview (a 10 px wiggle used to start a page scroll, which ended the
+  press and cut the turn); the touch is read every frame while talking, in
+  case LVGL let go of it. The log says `face talk: press` and
+  `face talk: release (released | press_lost)`, or `face: swipe`. The
+  pre-roll is 480 ms on this board, so the 350 ms before the talk starts is
+  still recorded.
 - **IMU** (`jolly_imu.c`, `jolly_motion.c`): an optional MPU-6050 (GY-521) on the
   I2C header (3V3, GND, SDA IO16, SCL IO15; 0x68 beside the touch controller's
   0x38 and the codec's 0x18), probed at start. Without it nothing changes. With it,
