@@ -266,6 +266,17 @@ menu "Muse"
             logs nothing becomes a crash report (muse_hang.h). Pair it with
             the task and interrupt watchdogs.
 
+    config MUSE_JOLLY_FAST_URL
+        string "Jolly's atajo: the Mini's jolly-atajo URL"
+        depends on MUSE_JOLLY
+        default ""
+        help
+            http://host:port of the Mac Mini's jolly-atajo service, which
+            answers simple questions locally while Muse's turn runs in
+            parallel (jolly_fast.h). Empty leaves it unset; the serial
+            console's ">fast_url=" sets it in NVS, which wins. The atajo stays
+            off until ">fast=1" and a key (">fast_key=").
+
     config MUSE_DNS_SERVERS
         string "DNS servers ahead of the router's"
         depends on MUSE_HATCH

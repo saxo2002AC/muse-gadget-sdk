@@ -26,6 +26,10 @@ int main(void) {
     assert(muse_secret_console_only("grd_key=abc"));
     assert(muse_secret_console_only("lcd_orient=1"));   /* board console commands (R14) */
     assert(muse_secret_console_only("lcd_madctl"));
+    assert(muse_secret_console_only("fast_key=0123"));  /* the atajo's family (Diana C10) */
+    assert(muse_secret_console_only("fast_url=http://x"));
+    assert(muse_secret_console_only("fast=1"));
+    assert(muse_secret_console_only("fast"));
     assert(!muse_secret_console_only("tts"));          /* the status command, no value */
     assert(!muse_secret_console_only("status"));
     assert(!muse_secret_console_only("hatch.token=abc"));
@@ -39,6 +43,7 @@ int main(void) {
     assert(muse_secret_value("tts_keyX"));
     assert(muse_secret_value("sdk_token"));
     assert(muse_secret_value("grd_key"));
+    assert(muse_secret_value("fast_key"));
     assert(!muse_secret_value("wifi.ssid"));
     assert(!muse_secret_value("volume"));
     return 0;
