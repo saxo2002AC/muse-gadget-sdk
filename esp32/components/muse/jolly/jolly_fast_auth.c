@@ -169,8 +169,18 @@ void jolly_hmac_sha256(const uint8_t *key, size_t key_len, const void *m1, size_
     sha_update(&s, pad, 64);
     sha_update(&s, inner, 32);
     sha_final(&s, out);
-    memset(k, 0, sizeof(k));   /* the key's copy, and what's derived from it */
-    memset(pad, 0, sizeof(pad));
+    jolly_wipe(k, sizeof(k));   /* the key's copy, and what's derived from it */
+    jolly_wipe(pad, sizeof(pad));
+    jolly_wipe(inner, sizeof(inner));
+    jolly_wipe(&s, sizeof(s));
+}
+
+void jolly_wipe(void *p, size_t n)
+{
+    volatile uint8_t *v = p;
+    while (n--) {
+        *v++ = 0;
+    }
 }
 
 /* ---- Hex ---- */
@@ -247,7 +257,7 @@ bool jolly_fast_key_ok(const char *hex)
 {
     uint8_t k[32];
     bool ok = jolly_unhex(hex, k, 32);
-    memset(k, 0, sizeof(k));
+    jolly_wipe(k, sizeof(k));
     return ok;
 }
 

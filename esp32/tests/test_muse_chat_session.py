@@ -234,6 +234,48 @@ static void dropped_turn() {
     s_push = false;
     memset(s_drop_ids, 0, sizeof(s_drop_ids));
 }
+/* The atajo beat Muse's ack: the dropped note's ids never came. Muse's
+ * reply to it still mustn't play, not in a quick new turn either. */
+static void dropped_before_ack() {
+    char texts[MAX_MSGS * TEXT_MAX] = {};
+    s_turn.texts = texts;
+    memset(s_drop_msgs, 0, sizeof(s_drop_msgs));
+    begin();
+    s_turn.acked = false;
+    s_turn.user_ids[0][0] = s_turn.user_ids[1][0] = '\0';
+    suppress_turn_replies(now_us());
+    turn_finish();
+    s_push = false;
+    event("delta.message_start", "r1", "dropped-note", "");          /* idle: not played, remembered */
+    assert(!s_push && s_turn.phase == P_IDLE);
+    /* A new turn, before its own ack: nothing binds. */
+    begin();
+    s_turn.acked = false;
+    s_turn.user_ids[0][0] = s_turn.user_ids[1][0] = '\0';
+    event("delta.text_append", "r1", "", "Muse's answer to the old one");
+    event("message.assistant", "r2", "dropped-note", "Its other message");
+    assert(s_turn.nmsgs == 0);
+    /* Its ack: only replies to it bind; parentless ones don't, in the window. */
+    s_turn.acked = true;
+    strlcpy(s_turn.user_ids[0], "new", sizeof(s_turn.user_ids[0]));
+    event("message.assistant", "r3", "", "Parentless");
+    assert(s_turn.nmsgs == 0);
+    event("message.assistant", "mine", "new", "The new answer.");
+    assert(s_turn.nmsgs == 1);
+    /* Past the window, the old reply's later deltas are still refused by id. */
+    turn_finish();
+    s_push = false;
+    s_drop_until_us = now_us() - 1;
+    event("delta.text_append", "r1", "", "more of the old answer");
+    assert(!s_push);
+    begin();
+    event("delta.text_append", "r1", "", "more of the old answer");
+    assert(s_turn.nmsgs == 0);
+    turn_finish();
+    s_push = false;
+    memset(s_drop_ids, 0, sizeof(s_drop_ids));
+    memset(s_drop_msgs, 0, sizeof(s_drop_msgs));
+}
 int main(int argc, char **argv) {
     assert(argc == 2);
     switch (atoi(argv[1])) {
@@ -243,6 +285,7 @@ int main(int argc, char **argv) {
     case 3: speech_queue(); break;
     case 4: late_message(); break;
     case 5: dropped_turn(); break;
+    case 6: dropped_before_ack(); break;
     default: return 2;
     }
 }
@@ -286,3 +329,6 @@ int main(int argc, char **argv) {
 
     def test_a_turn_answered_locally_never_plays_muses_reply(self):
         self.run_case(5)
+
+    def test_a_drop_before_the_ack_still_never_plays_muses_reply(self):
+        self.run_case(6)

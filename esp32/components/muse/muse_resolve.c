@@ -40,7 +40,7 @@ static const char *TAG = "muse_resolve";
 #define CONFIG_MUSE_DNS_SERVERS ""   /* boards without Muse's settings (the Voice PE) */
 #endif
 
-#define CACHE 2   /* the TTS server and the Guardián */
+#define CACHE 3   /* the TTS server, the Guardián and the atajo */
 
 typedef struct {
     char host[MUSE_URL_HOST_MAX];

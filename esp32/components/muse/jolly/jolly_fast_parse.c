@@ -117,11 +117,11 @@ bool jolly_fast_parse(const char *json, size_t len, jolly_fast_answer_t *out)
         !(intent = str(o, "intent", sizeof(out->intent) - 1)) || !(text = str(o, "text", JOLLY_FAST_TEXT_MAX)) ||
         !(reason = str(o, "reason", sizeof(out->reason) - 1)) ||
         !(transcript = str(o, "transcript", JOLLY_FAST_TRANSCRIPT_MAX)) || !num(o, "stt_ms", 0, 60000, &out->stt_ms) ||
-        !num(o, "total_ms", 0, 60000, &out->total_ms) || !clean(transcript, false)) {
+        !num(o, "total_ms", 0, 60000, &out->total_ms) || !clean(transcript, true)) {
         goto done;
     }
     if (!strcmp(action, "local")) {
-        if (!one_of(intent, INTENTS) || !text[0] || !clean(text, true) || reason[0]) {
+        if (!one_of(intent, INTENTS) || !text[0] || !clean(text, true) || reason[0] || transcript[0]) {   /* C14 */
             goto done;
         }
         out->local = true;

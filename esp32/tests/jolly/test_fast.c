@@ -79,6 +79,12 @@ static void strict(void)
     assert(!parse("{\"v\":1,\"action\":\"local\",\"intent\":\"hora\",\"text\":\"Ya.\",\"reason\":\"\",\"transcript\":\"\","
                   "\"stt_ms\":1,\"total_ms\":60001}", &a));
     assert(!parse("[1]", &a) && !parse("", &a) && !parse("{", &a));
+    /* local carries no transcript (Diana C14). */
+    assert(!parse("{\"v\":1,\"action\":\"local\",\"intent\":\"hora\",\"text\":\"Ya.\",\"reason\":\"\","
+                  "\"transcript\":\"que hora es\",\"stt_ms\":1,\"total_ms\":2}", &a));
+    /* A transcript with controls is refused too (it may be logged). */
+    assert(!parse("{\"v\":1,\"action\":\"forward\",\"intent\":\"\",\"text\":\"\",\"reason\":\"no_match\","
+                  "\"transcript\":\"a\\n@fast x\",\"stt_ms\":1,\"total_ms\":2}", &a));
     /* local needs text; forward has none, and a reason. */
     assert(!parse(LOCAL(""), &a));
     assert(!parse("{\"v\":1,\"action\":\"forward\",\"intent\":\"\",\"text\":\"Hola\",\"reason\":\"no_match\","

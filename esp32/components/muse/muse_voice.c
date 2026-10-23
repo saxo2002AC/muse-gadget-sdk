@@ -376,14 +376,23 @@ static bool speak_local(const char *text)
 {
     static int16_t buf[MUSE_AUDIO_CHUNK];
     static const int16_t silence[MUSE_AUDIO_CHUNK];
-    for (int i = 0; i < 25 && !muse_hatch_turn_dropped(); i++) {
+    /* muse_tts has one caller at a time: only once the session has dropped
+     * Muse's turn (and closed its speech) may we use it. Up to 3 s; else
+     * the answer is shown, not said. */
+    int64_t wait_until = esp_timer_get_time() + 3000000;
+    while ((!muse_hatch_turn_dropped() || muse_tts_busy()) && esp_timer_get_time() < wait_until) {
+        if (got_event(MUSE_PTT_DOWN)) {
+            return true;
+        }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
-    for (int i = 0; i < 50 && muse_tts_busy(); i++) {
-        vTaskDelay(pdMS_TO_TICKS(20));
+    bool free_to_speak = muse_hatch_turn_dropped() && !muse_tts_busy();
+    if (!free_to_speak) {
+        ESP_LOGW(TAG, "fast: Muse's turn didn't close in time; the answer as text");
     }
     muse_state_set_caption("%s", text);
-    bool voiced = muse_settings_speaker_on() && muse_tts_configured() && muse_tts_begin(text, strlen(text), false);
+    bool voiced = free_to_speak && muse_settings_speaker_on() && muse_tts_configured() &&
+                  muse_tts_begin(text, strlen(text), false);
     int64_t t0 = esp_timer_get_time();
     if (!voiced) {
         /* No voice: the answer as text, for reading time. */
@@ -422,6 +431,16 @@ static bool speak_local(const char *text)
             muse_state_set_level(muse_audio_level(buf, n));
             muse_audio_write(buf, n);
         } else if (st != MUSE_TTS_RUNNING && !muse_tts_pending()) {
+            if (st == MUSE_TTS_FAILED) {
+                /* No speech after all: leave the answer up to be read. */
+                int64_t until = esp_timer_get_time() + 1500000 + (int64_t)strlen(text) * 1000000 / 16;
+                while (esp_timer_get_time() < until) {
+                    if (got_event(MUSE_PTT_DOWN)) {
+                        return true;
+                    }
+                    muse_audio_write(silence, MUSE_AUDIO_CHUNK);
+                }
+            }
             break;
         } else {
             muse_state_set_level(0);
@@ -445,7 +464,7 @@ static int fast_check(bool muse_started, bool *delivered, bool *interrupted)
         ESP_LOGI(TAG, "fast: Muse answered first");
         return 0;
     }
-    jolly_fast_answer_t a;
+    static jolly_fast_answer_t a;   /* ~730 bytes: off the voice task's stack */
     jolly_fast_state_t st = jolly_fast_ask_poll(&a);
     if (st == JFA_PENDING) {
         return 0;
@@ -473,7 +492,7 @@ static bool fast_only(bool *delivered)
             s_fast_asked = false;
             return true;
         }
-        jolly_fast_answer_t a;
+        static jolly_fast_answer_t a;   /* off the voice task's stack */
         jolly_fast_state_t st = jolly_fast_ask_poll(&a);
         if (st == JFA_LOCAL) {
             s_fast_asked = false;
@@ -533,6 +552,14 @@ static bool hatch_reply_as(bool *delivered, bool pushed)
                 break;
             case MUSE_HATCH_EV_ERROR:
                 ESP_LOGW(TAG, "muse: %s", text);
+#if FAST
+                if (s_fast_asked) {
+                    /* Muse failed; the atajo may still answer. A failed turn
+                     * needs no dropping: nothing of Muse's will play. */
+                    muse_state_set_level(0);
+                    return fast_only(delivered);
+                }
+#endif
                 muse_state_set_level(0);
                 go_idle(text);
                 return false;

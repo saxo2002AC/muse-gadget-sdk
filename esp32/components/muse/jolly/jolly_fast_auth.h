@@ -49,6 +49,9 @@ void jolly_sha256(const void *data, size_t len, uint8_t out[32]);
 void jolly_hmac_sha256(const uint8_t *key, size_t key_len, const void *m1, size_t l1, const void *m2, size_t l2,
                        uint8_t out[32]);
 
+/* Zeroes n bytes in a way the optimiser can't drop (keys, derived pads). */
+void jolly_wipe(void *p, size_t n);
+
 /* Lowercase hex of n bytes into out (2n + 1). */
 void jolly_hex(const uint8_t *in, size_t n, char *out);
 

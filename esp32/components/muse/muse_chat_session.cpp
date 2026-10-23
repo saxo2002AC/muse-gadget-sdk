@@ -1447,6 +1447,34 @@ static bool dropped_parent(const char *id)
     return id && id[0] && (!strcmp(id, s_drop_ids[0]) || !strcmp(id, s_drop_ids[1]));
 }
 
+/* Assistant messages refused in the window, by id: their later deltas stay
+ * refused even past it, or in a new turn. A small ring. */
+static char s_drop_msgs[8][80];
+static int s_drop_next;
+
+static bool in_drop_window(void)
+{
+    return now_us() < s_drop_until_us;
+}
+
+static bool dropped_msg(const char *id)
+{
+    for (auto &d : s_drop_msgs) {
+        if (id && id[0] && !strcmp(d, id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void remember_dropped(const char *id)
+{
+    if (id && id[0] && !dropped_msg(id)) {
+        strlcpy(s_drop_msgs[s_drop_next], id, sizeof(s_drop_msgs[0]));
+        s_drop_next = (s_drop_next + 1) % 8;
+    }
+}
+
 /* The message `id` if it belongs to this turn, binding it on first sight; else -1. */
 static int bind_msg(const char *id, cJSON *payload)
 {
@@ -1461,8 +1489,13 @@ static int bind_msg(const char *id, cJSON *payload)
     if (!parent) {
         parent = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "parent_message_id"));
     }
-    if (dropped_parent(parent)) {
-        muse_chat_reject(&s_turn.rejected, id);   /* Muse's answer to a note answered locally */
+    /* Muse's answer to a note answered locally: by its parent, by an id seen
+     * in the window, and in the window anything not plainly answering this
+     * turn's own acked note (the dropped note's ack may never have come). */
+    if (dropped_parent(parent) || dropped_msg(id) ||
+        (in_drop_window() && !(s_turn.acked && parent && is_user_id(parent)))) {
+        remember_dropped(id);
+        muse_chat_reject(&s_turn.rejected, id);
         return -1;
     }
     /* Once the ack names our message, replies to anything else are someone else's.
@@ -1653,12 +1686,17 @@ static void on_event(cJSON *line)
     /* Only where muse_voice plays them (muse_hatch_push_waiting); the Voice
      * PE's voice.c doesn't, and an unplayed one would hold the session. */
     if (CONFIG_MUSE_ENABLED && s_turn.phase == P_IDLE && now_us() - s_sub_us > PUSH_SETTLE_US &&
-        now_us() >= s_drop_until_us &&
+        !in_drop_window() && !dropped_msg(msg_id(payload, line)) &&
         (!strcmp(event, "delta.message_start") || !strcmp(event, "delta.text_append") ||
          !strcmp(event, "delta.message_done") || !strcmp(event, "message.assistant"))) {
         begin_push();
     }
     if (s_turn.phase != P_WAIT_REPLY) {
+        bool assistant = !strcmp(event, "delta.message_start") || !strcmp(event, "delta.text_append") ||
+                         !strcmp(event, "delta.message_done") || !strcmp(event, "message.assistant");
+        if (assistant && in_drop_window()) {
+            remember_dropped(msg_id(payload, line));   /* not played now, nor later */
+        }
         return;
     }
 
@@ -2536,7 +2574,10 @@ extern "C" void muse_hatch_turn_drop(void)
     uint32_t gen = s_gen.load();
     s_dropped = false;
     ++s_gen;
-    post(CMD_DROP, gen);
+    cmd_t cmd{ CMD_DROP, gen, nullptr };
+    /* It must get there: until it does, Muse's turn may still speak. */
+    for (int i = 0; s_cmds && i < 20 && xQueueSend(s_cmds, &cmd, pdMS_TO_TICKS(100)) != pdTRUE; i++) {
+    }
     drain_out();
 }
 

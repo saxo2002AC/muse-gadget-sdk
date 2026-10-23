@@ -142,6 +142,7 @@ static bool ask(const job_t *j, jolly_fast_answer_t *a, const char **why)
     char *body = NULL;
     if (esp_http_client_open(c, (int)j->bytes) != ESP_OK) {
         *why = "connect";
+        muse_resolve_forget(&u);   /* a .local Mini may have a new address */
         goto done;
     }
     for (size_t off = 0; off < j->bytes;) {
@@ -163,7 +164,8 @@ static bool ask(const job_t *j, jolly_fast_answer_t *a, const char **why)
         *why = status ? "status" : "no answer";
         goto done;
     }
-    if (strncasecmp(heads.content_type, "application/json", 16) != 0) {
+    if (strncasecmp(heads.content_type, "application/json", 16) != 0 ||
+        (heads.content_type[16] && heads.content_type[16] != ';' && heads.content_type[16] != ' ')) {
         *why = "type";
         goto done;
     }
@@ -249,11 +251,11 @@ static void worker(void *arg)
         ESP_LOGW(TAG, "fast: error %s ask=%dms%s", why, (int)took, current ? "" : " (no longer wanted)");
     }
     jolly_fast_note_last(last);
-    memset(&a, 0, sizeof(a));
-    memset(j->cfg.key, 0, sizeof(j->cfg.key));
+    jolly_wipe(&a, sizeof(a));
+    jolly_wipe(j->cfg.key, sizeof(j->cfg.key));
     heap_caps_free(j->pcm);
     heap_caps_free(j);
-    vTaskDelete(NULL);
+    vTaskDeleteWithCaps(NULL);   /* created WithCaps: its stack and TCB go back to PSRAM */
 }
 
 bool jolly_fast_ask_start(const int16_t *pcm, size_t frames)
@@ -288,13 +290,13 @@ bool jolly_fast_ask_start(const int16_t *pcm, size_t frames)
         skip = "memory";
     }
     if (skip) {
-        memset(cfg.key, 0, sizeof(cfg.key));
+        jolly_wipe(cfg.key, sizeof(cfg.key));
         ESP_LOGI(TAG, "fast: not asked (%s)", skip);
         return false;
     }
     memcpy(j->pcm, pcm, j->bytes);
     j->cfg = cfg;
-    memset(cfg.key, 0, sizeof(cfg.key));
+    jolly_wipe(cfg.key, sizeof(cfg.key));
     j->t0_ms = now_ms();
     j->deadline_ms = j->t0_ms + cfg.ms;
     taskENTER_CRITICAL(&s_mux);
@@ -309,7 +311,7 @@ bool jolly_fast_ask_start(const int16_t *pcm, size_t frames)
         s_running = false;
         s_state = JFA_ERROR;
         taskEXIT_CRITICAL(&s_mux);
-        memset(j->cfg.key, 0, sizeof(j->cfg.key));
+        jolly_wipe(j->cfg.key, sizeof(j->cfg.key));
         heap_caps_free(j->pcm);
         heap_caps_free(j);
         ESP_LOGW(TAG, "fast: no task");

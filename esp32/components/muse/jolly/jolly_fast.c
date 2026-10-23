@@ -84,7 +84,7 @@ static void load_locked(void)
     if (nvs_get_str(h, "key", hex, &n) == ESP_OK) {
         s_cfg.have_key = jolly_unhex(hex, s_cfg.key, sizeof(s_cfg.key));
     }
-    memset(hex, 0, sizeof(hex));
+    jolly_wipe(hex, sizeof(hex));
     if (nvs_get_i32(h, "max_s", &v) == ESP_OK && jolly_fast_max_s_ok(v)) {
         s_cfg.max_s = (int)v;
     }
@@ -134,7 +134,7 @@ bool jolly_fast_config(jolly_fast_cfg_t *cfg)
     muse_url_t u;
     bool ready = cfg->on && cfg->have_key && cfg->url[0] && muse_url_parse(cfg->url, &u);
     if (!ready) {
-        memset(cfg->key, 0, sizeof(cfg->key));
+        jolly_wipe(cfg->key, sizeof(cfg->key));
     }
     return ready;
 }
@@ -190,7 +190,7 @@ bool jolly_fast_console_command(const char *line)
         if (err == ESP_OK) {
             s_cfg.have_key = v[0] && jolly_unhex(v, s_cfg.key, sizeof(s_cfg.key));
             if (!s_cfg.have_key) {
-                memset(s_cfg.key, 0, sizeof(s_cfg.key));
+                jolly_wipe(s_cfg.key, sizeof(s_cfg.key));
             }
         }
         unlock();
