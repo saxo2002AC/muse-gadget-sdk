@@ -46,6 +46,7 @@
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_eyes.h"
 #include "jolly/jolly_imu.h"
+#include "jolly/jolly_led.h"
 #include "jolly/jolly_mood.h"
 #include "jolly/jolly_pages.h"
 #define SETTINGS_COL (1 + JOLLY_PAGES)   /* Jolly, its status pages, then Muse's settings */
@@ -594,7 +595,16 @@ static void jolly_tick(muse_mode_t mode, float voice_level)
         .surprise_until_ms = s_surprise_until_ms, .wink_until_ms = s_wink_until_ms,
         .alarm = jolly_alarm_mood(&s_alarm, now),
     };
-    jolly_eyes_set_mood(jolly_mood_pick(&in));
+    jolly_mood_t mood = jolly_mood_pick(&in);
+    jolly_eyes_set_mood(mood);
+    /* The status LED (jolly_led.h): quiet hours keep it off but for talking and pats. */
+    bool talking = mood == JM_ESCUCHANDO || mood == JM_PENSANDO || mood == JM_HABLANDO || mood == JM_CARINO;
+    jolly_led_in_t led = {
+        .mood = in.quiet && !talking ? JM_DURMIENDO : mood, .link = link.link, .level = level,
+        .alarming = link.link == JL_OK && jolly_alarm_active(&s_alarm, now), .voice_level = voice_level,
+        .now_ms = now, .asleep = muse_state_asleep(),
+    };
+    jolly_led_show(&led);
     static uint32_t s_flashes;
     uint32_t flashes = jolly_imu_flashes();
     if (flashes != s_flashes) {

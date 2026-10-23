@@ -202,3 +202,10 @@ void jolly_clock_text(char *out, size_t cap)
     localtime_r(&now, &lt);
     jolly_fmt_clock(true, lt.tm_hour, lt.tm_min, JOLLY_CLOCK_H12, out, cap);
 }
+
+/* jolly_led.h: no LED in the simulator. */
+#include "jolly/jolly_led.h"
+void jolly_led_show(const jolly_led_in_t *state)
+{
+    (void)state;
+}
