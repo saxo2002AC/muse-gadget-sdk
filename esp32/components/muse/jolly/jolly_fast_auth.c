@@ -234,18 +234,21 @@ void jolly_fast_auth(const uint8_t key[32], long long ts, const char *nonce, con
     jolly_hex(d, 32, out);
 }
 
-bool jolly_fast_sig_ok(const uint8_t key[32], const char *nonce, const char *body, size_t len, const char *sig_hex)
+bool jolly_fast_sig_ok(const uint8_t key[32], const char *nonce, int status, const char *body, size_t len,
+                       const char *sig_hex)
 {
-    uint8_t got[32], want[32];
+    uint8_t got[32], want[32], sha[32];
     if (!sig_hex || !jolly_unhex(sig_hex, got, 32)) {
         return false;
     }
-    char head[64];
-    int n = snprintf(head, sizeof(head), "%s|", nonce);
-    if (n <= 0 || (size_t)n >= sizeof(head)) {
+    char sha_hex[65], line[160];
+    jolly_sha256(body, len, sha);
+    jolly_hex(sha, 32, sha_hex);
+    int n = snprintf(line, sizeof(line), "RESP|%s|%d|%s", nonce, status, sha_hex);
+    if (n <= 0 || (size_t)n >= sizeof(line)) {
         return false;
     }
-    jolly_hmac_sha256(key, 32, head, (size_t)n, body, len, want);
+    jolly_hmac_sha256(key, 32, line, (size_t)n, NULL, 0, want);
     uint8_t diff = 0;   /* constant time */
     for (int i = 0; i < 32; i++) {
         diff |= got[i] ^ want[i];

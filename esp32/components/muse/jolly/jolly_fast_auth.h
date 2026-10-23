@@ -33,12 +33,13 @@ extern "C" {
  *   request   X-Jolly-Ts     unix seconds (SNTP: no clock, no atajo)
  *             X-Jolly-Nonce  32 hex, random per request
  *             X-Jolly-Auth   hex HMAC-SHA256(key, "POST|/v1/ask|<ts>|<nonce>|<hex sha256(body)>")
- *   response  X-Jolly-Sig    hex HMAC-SHA256(key, "<nonce>|<body>"): checked before
- *                            a local answer is spoken (Diana C15)
+ *   response  X-Jolly-Sig    hex HMAC-SHA256(key, "RESP|<nonce>|<status>|<hex sha256(body)>"):
+ *                            checked before the answer is parsed (Diana C15)
  *
- * The key is 64 hex digits; HMAC takes its 32 bytes. SHA-256 and HMAC are
- * here, portable, so the host tests run them (tests/jolly/test_fast_auth.c,
- * FIPS 180-2 and RFC 4231 vectors). Pure.
+ * Contract v1.1 (Fernando's, tests/jolly/contract/atajo/). The key is 64 hex
+ * digits; HMAC takes its 32 bytes. SHA-256 and HMAC are here, portable, so
+ * the host tests run them (tests/jolly/test_fast_auth.c: FIPS 180-2, RFC
+ * 4231 and the contract's auth.vectors.json). Pure.
  */
 
 #define JOLLY_FAST_KEY_HEX 64
@@ -65,8 +66,9 @@ void jolly_fast_canonical(long long ts, const char *nonce, const uint8_t body_sh
 void jolly_fast_auth(const uint8_t key[32], long long ts, const char *nonce, const uint8_t body_sha[32],
                      char out[65]);
 
-/* The response's X-Jolly-Sig is right for this request's nonce and this body. */
-bool jolly_fast_sig_ok(const uint8_t key[32], const char *nonce, const char *body, size_t len, const char *sig_hex);
+/* The response's X-Jolly-Sig is right for this request's nonce, this status and this body. */
+bool jolly_fast_sig_ok(const uint8_t key[32], const char *nonce, int status, const char *body, size_t len,
+                       const char *sig_hex);
 
 /* Config: 64 hex digits; the deadline 800..3000 ms; the longest note asked about, 2..15 s. */
 bool jolly_fast_key_ok(const char *hex);

@@ -3,6 +3,7 @@
 """tools/jolly/fake_atajo.py: contract v1.1's signed requests and answers, as
 the board makes and checks them (jolly_fast_auth.c does the same maths)."""
 import hashlib
+import json
 import hmac
 import http.client
 import os
@@ -46,7 +47,8 @@ class FakeAtajo(unittest.TestCase):
         port = self.start('local')
         status, sig, body, nonce = self.ask(port)
         self.assertEqual(status, 200)
-        want = hmac.new(KEY, nonce.encode() + b'|' + body, hashlib.sha256).hexdigest()
+        want = hmac.new(KEY, f'RESP|{nonce}|200|{hashlib.sha256(body).hexdigest()}'.encode(),
+                        hashlib.sha256).hexdigest()
         self.assertEqual(sig, want)
         self.assertIn(b'"action":"local"', body)
 
@@ -64,7 +66,21 @@ class FakeAtajo(unittest.TestCase):
         port = self.start('badsig')
         status, sig, body, nonce = self.ask(port)
         self.assertEqual(status, 200)
-        self.assertNotEqual(sig, hmac.new(KEY, nonce.encode() + b'|' + body, hashlib.sha256).hexdigest())
+        self.assertNotEqual(sig, fake_atajo.sign_answer(KEY, nonce, 200, body))
+
+    def test_contract_auth_vectors(self):
+        # Fernando's public vector (contract/atajo/auth.vectors.json), as the firmware's test.
+        v = json.loads((fake_atajo.CONTRACT / 'auth.vectors.json').read_text(encoding='utf-8'))
+        key = bytes.fromhex(v['key_hex'])
+        body = bytes(range(256)) * 75
+        req = v['request']
+        self.assertEqual(hashlib.sha256(body).hexdigest(), req['body_sha256'])
+        self.assertEqual(fake_atajo.sign_request(key, req['headers']['X-Jolly-Ts'], req['headers']['X-Jolly-Nonce'],
+                                                 body), req['X-Jolly-Auth'])
+        resp = v['response']
+        answer = fake_atajo.load('ask.local.hora')
+        self.assertEqual(fake_atajo.sign_answer(key, req['headers']['X-Jolly-Nonce'], resp['status'], answer),
+                         resp['X-Jolly-Sig'])
 
     def test_canonical_line_matches_the_firmware(self):
         # Same as tests/jolly/test_fast_auth.c's request_auth().

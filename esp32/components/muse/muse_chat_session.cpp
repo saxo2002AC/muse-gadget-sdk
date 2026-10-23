@@ -1470,6 +1470,8 @@ static bool dropped_msg(const char *id)
 static void remember_dropped(const char *id)
 {
     if (id && id[0] && !dropped_msg(id)) {
+        /* Diana's acceptance test reads these: no Muse reply to a local answer plays. */
+        ESP_LOGI(TAG, "suppressed Muse message %.79s (its turn was answered locally)", id);
         strlcpy(s_drop_msgs[s_drop_next], id, sizeof(s_drop_msgs[0]));
         s_drop_next = (s_drop_next + 1) % 8;
     }
@@ -2371,8 +2373,9 @@ static void handle(const cmd_t &cmd)
         /* Answered on the board: whatever Muse says to this note never plays. */
         if (cmd.gen == s_turn.gen && !s_turn.text) {
             suppress_turn_replies(now_us());
+            ESP_LOGI(TAG, "muse turn dropped (local answer)%s, note %s", s_turn.phase != P_IDLE ? "" : " after it ended",
+                     s_turn.user_ids[0][0] ? s_turn.user_ids[0] : "not acked yet");
             if (s_turn.phase != P_IDLE) {
-                ESP_LOGI(TAG, "turn dropped: answered on the board");
                 turn_finish();
             }
         }

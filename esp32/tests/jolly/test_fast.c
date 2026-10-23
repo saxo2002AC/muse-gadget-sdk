@@ -47,7 +47,9 @@ static void fixtures(const char *dir)
     assert(jolly_fast_parse(b, n, &a) && !a.local && !strcmp(a.reason, "no_speech"));
     n = fixture(dir, "ask.worstcase.json", b, sizeof(b));
     assert(jolly_fast_parse(b, n, &a) && strlen(a.transcript) == 400);
-    n = fixture(dir, "ask.worstcase.local.json", b, sizeof(b));
+    n = fixture(dir, "ask.forward.slow.json", b, sizeof(b));
+    assert(jolly_fast_parse(b, n, &a) && !a.local && !strcmp(a.reason, "slow"));
+    n = fixture(dir, "ask.worstcase_local.json", b, sizeof(b));
     assert(jolly_fast_parse(b, n, &a) && strlen(a.text) == 280);
 }
 

@@ -114,7 +114,7 @@ class JollyHost(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
     def test_fast_auth(self):
-        code, out = build_and_run('fast_auth', CASES['fast_auth'])
+        code, out = build_and_run('fast_auth', CASES['fast_auth'], args=[str(TESTS)])
         self.assertEqual(code, 0, out)
 
     def test_speech_split(self):

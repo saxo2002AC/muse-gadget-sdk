@@ -220,23 +220,30 @@ front. `>imu` shows which way gravity reads once it's fitted.
 ## The atajo rápido (parallel mode)
 
 Plan: `WarRoom-Privado/jolly/plan-atajo-rapido.md`, workstream B; Diana's
-review `plan-atajo-security-review.md`. Contract v1.1, provisional until
-Fernando's is signed: `tests/jolly/contract/atajo/README.md`.
+review `plan-atajo-security-review.md`. Contract v1.1 is Fernando's, copied
+as is into `tests/jolly/contract/atajo/` (fixtures, `auth.vectors.json`,
+`make_fixtures.py`).
+
+**The atajo in parallel mode gives speed, not privacy.** Every note still
+reaches Muse (Meta's servers) whole, as without the atajo; a local answer
+only means Jolly speaks first and Muse's reply is never played.
 
 - **Flow (Andrés's D1, parallel):** the note streams to Muse live, exactly as
   without the atajo. On release the recording also goes to the Mini's
   jolly-atajo `/v1/ask` (`jolly_fast_ask.c`, a worker with its own copy). If a
   signed `local` answer comes within `fast_ms` (1500) and Muse hasn't started
   answering, Muse's turn is dropped (`muse_hatch_turn_drop()`: the chat
-  stream reset, and Muse's reply refused: by its parent id for good, and any
-  parentless message for 2 minutes) and Jolly says the answer with muse-voz
+  stream reset, and Muse's reply refused: by its parent id for good, and in
+  the next 2 minutes anything not answering a new turn's own note) and Jolly
+  says the answer with muse-voz
   (`speak_local()` in `muse_voice.c`). Otherwise Muse's turn carries on as
   always: forward, error, late, or Muse first. Muse unreachable (the note is
   kept): the atajo alone; a local answer means the note isn't kept.
 - **Auth:** the board never sends its key. Requests are signed
   (`X-Jolly-Auth`, HMAC-SHA256 over method, path, timestamp, nonce and the
-  body's hash) and answers must carry a valid `X-Jolly-Sig` before anything
-  is said (`jolly_fast_auth.c`). So `.local` (no DHCP reservation, Diana
+  body's hash) and answers must carry a valid `X-Jolly-Sig` (HMAC over
+  `RESP|nonce|status|sha256(body)`) before they're even parsed
+  (`jolly_fast_auth.c`, checked against the contract's vectors). So `.local` (no DHCP reservation, Diana
   C11) only risks the audio reaching an impersonator on the LAN, which
   parallel mode already sends to Muse; it can't make Jolly talk, and learns
   nothing reusable. No synced clock (SNTP), no ask.
@@ -247,6 +254,10 @@ Fernando's is signed: `tests/jolly/contract/atajo/README.md`.
   Diana's re-check), `>fast_max_s=2..15` (6), `>fast_ms=800..3000` (1500),
   `>fast_log=0|1` (RAM only: what it heard and said), `>fast`.
 - **Breaker:** two errors in a row skip the atajo for 5 minutes.
+- **Verifying a drop (Diana's acceptance: 20 local questions, no Muse
+  reply):** `muse_chat_session: muse turn dropped (local answer), note <id>`
+  for each, and `suppressed Muse message <id> (its turn was answered
+  locally)` for every reply of Muse's that arrives anyway.
 - **Logs:** `fast: local intent=hora ask=640ms stt=512ms`,
   `fast: forward reason=no_match …`, `fast: error <what> …`,
   `fast: first_audio=…ms after release`, `fast: Muse answered first`;

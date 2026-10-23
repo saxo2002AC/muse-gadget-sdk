@@ -1,0 +1,25 @@
+{
+  "note": "PUBLIC TEST VECTOR. key = 32 raw bytes decoded from key_hex (not the ASCII hex string).",
+  "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "request": {
+    "method": "POST",
+    "path": "/v1/ask",
+    "body": "bytes(range(256)) * 75 (19200 B)",
+    "body_sha256": "cf514f4b5a3dbf1b064dd612afefa92cc2d579e9a029b7a0e41d24585ddb59d4",
+    "headers": {
+      "X-Jolly-Ts": "1792771200",
+      "X-Jolly-Nonce": "00112233445566778899aabbccddeeff",
+      "Content-Type": "audio/L16; rate=16000; channels=1",
+      "Content-Length": "19200"
+    },
+    "signed_string": "POST|/v1/ask|1792771200|00112233445566778899aabbccddeeff|cf514f4b5a3dbf1b064dd612afefa92cc2d579e9a029b7a0e41d24585ddb59d4",
+    "X-Jolly-Auth": "c95d2c30a9dc9656353e05708a9f02bed368231eb77f9c3a497a844652a5a942"
+  },
+  "response": {
+    "status": 200,
+    "body_fixture": "ask.local.hora.json",
+    "body_sha256": "db77e601feec782dbb118f241db63260b5fe5ac3105af81af1d2885fbf0f4e2d",
+    "signed_string": "RESP|00112233445566778899aabbccddeeff|200|db77e601feec782dbb118f241db63260b5fe5ac3105af81af1d2885fbf0f4e2d",
+    "X-Jolly-Sig": "7d329392d8aa61af83b962ec7e43cd0f879301426b3f7a2f7fb2bae8bf83c8ce"
+  }
+}

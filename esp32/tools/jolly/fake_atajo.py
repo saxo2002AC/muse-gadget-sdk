@@ -15,8 +15,9 @@
 """A stand-in jolly-atajo for testing the board's atajo before the real one is up.
 
 Speaks contract v1.1 (tests/jolly/contract/atajo/README.md): POST /v1/ask
-with signed requests (X-Jolly-Ts, X-Jolly-Nonce, X-Jolly-Auth, checked before
-the body is read), and signed answers (X-Jolly-Sig).
+with signed requests (X-Jolly-Ts, X-Jolly-Nonce, X-Jolly-Auth; the headers
+checked before the body is read) and signed answers (X-Jolly-Sig =
+HMAC(K, "RESP|nonce|status|sha256hex(body)")), as Fernando's contract.
 
     tools/jolly/fake_atajo.py --scenario local --port 3998 --host 0.0.0.0 --key-file ~/.jolly_atajo_key
 
@@ -56,8 +57,9 @@ def sign_request(key, ts, nonce, body):
     return hmac.new(key, canonical(ts, nonce, hashlib.sha256(body).hexdigest()), hashlib.sha256).hexdigest()
 
 
-def sign_answer(key, nonce, body):
-    return hmac.new(key, nonce.encode() + b'|' + body, hashlib.sha256).hexdigest()
+def sign_answer(key, nonce, status, body):
+    msg = f'RESP|{nonce}|{status}|{hashlib.sha256(body).hexdigest()}'.encode()
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
 
 
 def make_handler(scenario, key):
@@ -122,14 +124,14 @@ def make_handler(scenario, key):
             if scenario == '500':
                 return self.error(500, 'internal')
             if scenario == 'garbage':
-                return self.reply(200, b'not json at all', sig=sign_answer(key, nonce, b'not json at all'))
+                return self.reply(200, b'not json at all', sig=sign_answer(key, nonce, 200, b'not json at all'))
             if scenario == 'big':
                 big = load('ask.local.hora').rstrip(b'}') + b',"pad":"' + b'x' * 1100 + b'"}'
-                return self.reply(200, big[:1025], sig=sign_answer(key, nonce, big[:1025]))
+                return self.reply(200, big[:1025], sig=sign_answer(key, nonce, 200, big[:1025]))
             answer = load('ask.forward.no_match' if scenario == 'forward' else 'ask.local.hora')
-            sig = sign_answer(key, nonce, answer)
+            sig = sign_answer(key, nonce, 200, answer)
             if scenario == 'badsig':
-                sig = sign_answer(key, '0' * 32, answer)
+                sig = sign_answer(key, '0' * 32, 200, answer)
             self.reply(200, answer, sig=sig)
 
     return Handler

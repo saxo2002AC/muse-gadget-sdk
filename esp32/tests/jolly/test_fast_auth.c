@@ -87,23 +87,60 @@ static void response_sig(void)
     assert(jolly_unhex(KEY_HEX, key, 32));
     const char *nonce = "00112233445566778899aabbccddeeff";
     const char *body = "{\"v\":1,\"action\":\"local\"}";
-    uint8_t d[32];
-    char sig[65], msg[128];
-    snprintf(msg, sizeof(msg), "%s|%s", nonce, body);
-    jolly_hmac_sha256(key, 32, msg, strlen(msg), NULL, 0, d);
+    /* HMAC(K, "RESP|<nonce>|<status>|<hex sha256(body)>") */
+    uint8_t sha[32], d[32];
+    char sha_hex[65], line[160], sig[65];
+    jolly_sha256(body, strlen(body), sha);
+    jolly_hex(sha, 32, sha_hex);
+    snprintf(line, sizeof(line), "RESP|%s|200|%s", nonce, sha_hex);
+    jolly_hmac_sha256(key, 32, line, strlen(line), NULL, 0, d);
     jolly_hex(d, 32, sig);
-    assert(jolly_fast_sig_ok(key, nonce, body, strlen(body), sig));
-    sig[0] = sig[0] == '0' ? '1' : '0';                                  /* one digit off */
-    assert(!jolly_fast_sig_ok(key, nonce, body, strlen(body), sig));
+    assert(jolly_fast_sig_ok(key, nonce, 200, body, strlen(body), sig));
+    assert(!jolly_fast_sig_ok(key, nonce, 500, body, strlen(body), sig));   /* bound to the status */
+    sig[0] = sig[0] == '0' ? '1' : '0';                                     /* one digit off */
+    assert(!jolly_fast_sig_ok(key, nonce, 200, body, strlen(body), sig));
     jolly_hex(d, 32, sig);
-    assert(!jolly_fast_sig_ok(key, "ffeeddccbbaa99887766554433221100", body, strlen(body), sig));   /* another request's */
-    assert(!jolly_fast_sig_ok(key, nonce, body, strlen(body) - 1, sig));   /* a body cut short */
-    assert(!jolly_fast_sig_ok(key, nonce, body, strlen(body), ""));        /* no signature */
-    assert(!jolly_fast_sig_ok(key, nonce, body, strlen(body), "zz"));
-    for (char *c = sig; *c; c++) {                                        /* uppercase hex is fine */
+    assert(!jolly_fast_sig_ok(key, "ffeeddccbbaa99887766554433221100", 200, body, strlen(body), sig));
+    assert(!jolly_fast_sig_ok(key, nonce, 200, body, strlen(body) - 1, sig));   /* a body cut short */
+    assert(!jolly_fast_sig_ok(key, nonce, 200, body, strlen(body), ""));        /* no signature */
+    assert(!jolly_fast_sig_ok(key, nonce, 200, body, strlen(body), "zz"));
+    for (char *c = sig; *c; c++) {                                             /* uppercase hex is fine */
         *c = (char)(*c >= 'a' && *c <= 'f' ? *c - 32 : *c);
     }
-    assert(jolly_fast_sig_ok(key, nonce, body, strlen(body), sig));
+    assert(jolly_fast_sig_ok(key, nonce, 200, body, strlen(body), sig));
+}
+
+/* contract/atajo/auth.vectors.json: Fernando's public test vector, checked
+ * against openssl. The constants below are its values. */
+static void contract_vectors(const char *dir)
+{
+    uint8_t key[32];
+    assert(jolly_unhex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", key, 32));
+    /* Request: body = bytes(range(256)) * 75. */
+    static uint8_t body[19200];
+    for (size_t i = 0; i < sizeof(body); i++) {
+        body[i] = (uint8_t)(i % 256);
+    }
+    uint8_t sha[32];
+    jolly_sha256(body, sizeof(body), sha);
+    hex_is(sha, 32, "cf514f4b5a3dbf1b064dd612afefa92cc2d579e9a029b7a0e41d24585ddb59d4");
+    char line[200], auth[65];
+    jolly_fast_canonical(1792771200LL, "00112233445566778899aabbccddeeff", sha, line, sizeof(line));
+    assert(!strcmp(line, "POST|/v1/ask|1792771200|00112233445566778899aabbccddeeff|"
+                         "cf514f4b5a3dbf1b064dd612afefa92cc2d579e9a029b7a0e41d24585ddb59d4"));
+    jolly_fast_auth(key, 1792771200LL, "00112233445566778899aabbccddeeff", sha, auth);
+    assert(!strcmp(auth, "c95d2c30a9dc9656353e05708a9f02bed368231eb77f9c3a497a844652a5a942"));
+    /* Response: 200, the body of ask.local.hora.json. */
+    char path[512], resp[1100];
+    snprintf(path, sizeof(path), "%s/contract/atajo/ask.local.hora.json", dir);
+    FILE *f = fopen(path, "rb");
+    assert(f);
+    size_t n = fread(resp, 1, sizeof(resp), f);
+    fclose(f);
+    jolly_sha256(resp, n, sha);
+    hex_is(sha, 32, "db77e601feec782dbb118f241db63260b5fe5ac3105af81af1d2885fbf0f4e2d");
+    assert(jolly_fast_sig_ok(key, "00112233445566778899aabbccddeeff", 200, resp, n,
+                             "7d329392d8aa61af83b962ec7e43cd0f879301426b3f7a2f7fb2bae8bf83c8ce"));
 }
 
 static void config(void)
@@ -123,8 +160,10 @@ static void config(void)
     assert(strlen(n) == 32 && !strncmp(n, "000102feff", 10));
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    assert(argc == 2);
+    contract_vectors(argv[1]);
     sha256();
     hmac();
     request_auth();

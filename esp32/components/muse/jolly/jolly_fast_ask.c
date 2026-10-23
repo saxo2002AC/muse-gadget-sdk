@@ -195,7 +195,7 @@ static bool ask(const job_t *j, jolly_fast_answer_t *a, const char **why)
         goto done;
     }
     /* Signed by the key we never send (Diana C15): nobody else can make Jolly talk. */
-    if (!jolly_fast_sig_ok(j->cfg.key, nonce, body, (size_t)got, heads.sig)) {
+    if (!jolly_fast_sig_ok(j->cfg.key, nonce, status, body, (size_t)got, heads.sig)) {
         *why = "signature";
         goto done;
     }
