@@ -217,6 +217,45 @@ feliz and quiet hours, but not over a current crit: security still wins over
 play. Face-down assumes the GY-521 lies flat, chip side towards the screen's
 front. `>imu` shows which way gravity reads once it's fitted.
 
+## The atajo rápido (parallel mode)
+
+Plan: `WarRoom-Privado/jolly/plan-atajo-rapido.md`, workstream B; Diana's
+review `plan-atajo-security-review.md`. Contract v1.1, provisional until
+Fernando's is signed: `tests/jolly/contract/atajo/README.md`.
+
+- **Flow (Andrés's D1, parallel):** the note streams to Muse live, exactly as
+  without the atajo. On release the recording also goes to the Mini's
+  jolly-atajo `/v1/ask` (`jolly_fast_ask.c`, a worker with its own copy). If a
+  signed `local` answer comes within `fast_ms` (1500) and Muse hasn't started
+  answering, Muse's turn is dropped (`muse_hatch_turn_drop()`: the chat
+  stream reset, and Muse's reply refused: by its parent id for good, and any
+  parentless message for 2 minutes) and Jolly says the answer with muse-voz
+  (`speak_local()` in `muse_voice.c`). Otherwise Muse's turn carries on as
+  always: forward, error, late, or Muse first. Muse unreachable (the note is
+  kept): the atajo alone; a local answer means the note isn't kept.
+- **Auth:** the board never sends its key. Requests are signed
+  (`X-Jolly-Auth`, HMAC-SHA256 over method, path, timestamp, nonce and the
+  body's hash) and answers must carry a valid `X-Jolly-Sig` before anything
+  is said (`jolly_fast_auth.c`). So `.local` (no DHCP reservation, Diana
+  C11) only risks the audio reaching an impersonator on the LAN, which
+  parallel mode already sends to Muse; it can't make Jolly talk, and learns
+  nothing reusable. No synced clock (SNTP), no ask.
+- **Diana's C12 (no leaks) doesn't apply:** in parallel mode the audio always
+  reaches Muse, by Andrés's choice. D2 (forwarding text) is moot.
+- **Console (serial only, the `fast` family is console-only):** `>fast_url=`,
+  `>fast_key=` (64 hex, never printed), `>fast=0|1` (**0 by default** until
+  Diana's re-check), `>fast_max_s=2..15` (6), `>fast_ms=800..3000` (1500),
+  `>fast_log=0|1` (RAM only: what it heard and said), `>fast`.
+- **Breaker:** two errors in a row skip the atajo for 5 minutes.
+- **Logs:** `fast: local intent=hora ask=640ms stt=512ms`,
+  `fast: forward reason=no_match …`, `fast: error <what> …`,
+  `fast: first_audio=…ms after release`, `fast: Muse answered first`;
+  never the text or the transcript unless `>fast_log=1`.
+- **Known case:** a late Muse message arriving while the atajo speaks finds
+  muse-voz busy and is shown as text.
+- `tools/jolly/fake_atajo.py` stands in for the Mini (scenarios local,
+  forward, slow, 500, garbage, big, badsig, refuse; key from a file).
+
 ## Decisions
 
 - **Clock** (`jolly_clock.c`): SNTP from pool.ntp.org and

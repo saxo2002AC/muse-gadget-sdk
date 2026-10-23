@@ -88,6 +88,13 @@ void muse_hatch_turn_end(void);
 /* Abandons the turn (tap, or barge-in during the reply). */
 void muse_hatch_turn_cancel(void);
 
+/* The turn was answered on the board (Jolly's atajo, parallel mode): cancel
+ * it like muse_hatch_turn_cancel(), and never play Muse's reply to that
+ * note, now or later. muse_hatch_turn_dropped() says when that's done (its
+ * speech stream closed), so the board may speak. */
+void muse_hatch_turn_drop(void);
+bool muse_hatch_turn_dropped(void);
+
 /* Muse sent a message after the turn ended (a story that follows "sure",
  * say): it's waiting to be played like a reply, with muse_hatch_turn_event()
  * and muse_hatch_turn_read(); muse_hatch_turn_cancel() drops it. */

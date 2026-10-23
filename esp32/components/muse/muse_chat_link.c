@@ -816,6 +816,16 @@ const char *muse_hatch_state_name(muse_hatch_state_t state)
     return "";
 }
 
+void muse_hatch_turn_drop(void)
+{
+    muse_hatch_turn_cancel();   /* replies come only within the turn here: cancelling drops them */
+}
+
+bool muse_hatch_turn_dropped(void)
+{
+    return true;
+}
+
 bool muse_hatch_push_waiting(void)
 {
     return false;   /* replies come back on Link's session per turn: none arrive between */

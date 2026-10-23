@@ -156,7 +156,8 @@ static_assert(MP3_BUF > MP3_POLL_ROOM + MP3_HOLD, "reads would stall with the MP
 
 /* ---- Voice task <-> session task ---- */
 
-enum cmd_type_t : uint8_t { CMD_CONNECT, CMD_FORGET, CMD_BEGIN, CMD_END, CMD_CANCEL, CMD_TEXT, CMD_TEXT_CANCEL, CMD_WAKE };
+enum cmd_type_t : uint8_t { CMD_CONNECT, CMD_FORGET, CMD_BEGIN, CMD_END, CMD_CANCEL, CMD_TEXT, CMD_TEXT_CANCEL, CMD_WAKE,
+                             CMD_DROP };
 
 struct cmd_t {
     cmd_type_t type;
@@ -174,6 +175,7 @@ static QueueHandle_t s_cmds, s_events;
 static StreamBufferHandle_t s_in, s_out;
 static std::atomic<uint32_t> s_gen{0};
 static std::atomic<bool> s_resting{false};
+static std::atomic<bool> s_dropped{true};   /* the last muse_hatch_turn_drop() is done */
 static std::atomic<bool> s_push{false};   /* a pushed message is waiting to be played */
 static int64_t s_sub_us;                  /* when the subscription opened */
 /*
@@ -1424,6 +1426,27 @@ static bool is_user_id(const char *id)
     return id && id[0] && (!strcmp(id, s_turn.user_ids[0]) || !strcmp(id, s_turn.user_ids[1]));
 }
 
+/*
+ * A turn answered on the board (Jolly's atajo, parallel mode): Muse got the
+ * note too, so its reply must never play. Replies naming that note are
+ * refused for good (until the next drop), and for a while anything Muse
+ * pushes without a parent: the reply may come before the ack named the note.
+ */
+#define DROP_WINDOW_US (120 * 1000000LL)
+static char s_drop_ids[2][80];
+static int64_t s_drop_until_us;
+
+static void suppress_turn_replies(int64_t now)
+{
+    memcpy(s_drop_ids, s_turn.user_ids, sizeof(s_drop_ids));
+    s_drop_until_us = now + DROP_WINDOW_US;
+}
+
+static bool dropped_parent(const char *id)
+{
+    return id && id[0] && (!strcmp(id, s_drop_ids[0]) || !strcmp(id, s_drop_ids[1]));
+}
+
 /* The message `id` if it belongs to this turn, binding it on first sight; else -1. */
 static int bind_msg(const char *id, cJSON *payload)
 {
@@ -1437,6 +1460,10 @@ static int bind_msg(const char *id, cJSON *payload)
     const char *parent = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "reply_to_message_id"));
     if (!parent) {
         parent = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "parent_message_id"));
+    }
+    if (dropped_parent(parent)) {
+        muse_chat_reject(&s_turn.rejected, id);   /* Muse's answer to a note answered locally */
+        return -1;
     }
     /* Once the ack names our message, replies to anything else are someone else's.
      * A pushed message answers nothing of ours: any assistant message goes. */
@@ -1626,6 +1653,7 @@ static void on_event(cJSON *line)
     /* Only where muse_voice plays them (muse_hatch_push_waiting); the Voice
      * PE's voice.c doesn't, and an unplayed one would hold the session. */
     if (CONFIG_MUSE_ENABLED && s_turn.phase == P_IDLE && now_us() - s_sub_us > PUSH_SETTLE_US &&
+        now_us() >= s_drop_until_us &&
         (!strcmp(event, "delta.message_start") || !strcmp(event, "delta.text_append") ||
          !strcmp(event, "delta.message_done") || !strcmp(event, "message.assistant"))) {
         begin_push();
@@ -2301,6 +2329,17 @@ static void handle(const cmd_t &cmd)
         break;
     case CMD_WAKE:   /* only ends hatch_task's resting wait */
         break;
+    case CMD_DROP:
+        /* Answered on the board: whatever Muse says to this note never plays. */
+        if (cmd.gen == s_turn.gen && !s_turn.text) {
+            suppress_turn_replies(now_us());
+            if (s_turn.phase != P_IDLE) {
+                ESP_LOGI(TAG, "turn dropped: answered on the board");
+                turn_finish();
+            }
+        }
+        s_dropped = true;
+        break;
     }
 }
 
@@ -2490,6 +2529,20 @@ extern "C" void muse_hatch_turn_cancel(void)
     ++s_gen;
     post(CMD_CANCEL, gen);
     drain_out();
+}
+
+extern "C" void muse_hatch_turn_drop(void)
+{
+    uint32_t gen = s_gen.load();
+    s_dropped = false;
+    ++s_gen;
+    post(CMD_DROP, gen);
+    drain_out();
+}
+
+extern "C" bool muse_hatch_turn_dropped(void)
+{
+    return s_dropped.load();
 }
 
 extern "C" void muse_hatch_set_resting(bool resting)

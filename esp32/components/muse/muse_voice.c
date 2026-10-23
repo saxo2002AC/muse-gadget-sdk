@@ -41,6 +41,13 @@
 #include "esp_attr.h"
 #include "jolly/jolly_client.h"
 #endif
+#if CONFIG_MUSE_JOLLY && CONFIG_MUSE_HATCH
+#define FAST 1                       /* Jolly's atajo, parallel mode (jolly_fast.h) */
+#include "jolly/jolly_fast_ask.h"
+#include "muse_tts.h"
+#else
+#define FAST 0
+#endif
 
 static const char *TAG = "muse_voice";
 
@@ -355,6 +362,135 @@ static void go_idle(const char *caption);
  * Plays Hatch's reply as it arrives, with its text as the caption. Returns
  * true if interrupted by a new press. *delivered: the VM has the note.
  */
+#if FAST
+static bool s_fast_asked;            /* this turn's recording went to the atajo too */
+static int64_t s_release_us;
+
+/*
+ * The atajo's answer, said with Muse's own voice (muse_tts), as a Muse
+ * reply would be: speaking face, its text as the caption, the mouth on the
+ * level. A press cuts it. Muse's turn was dropped first: its speech stream
+ * must be closed before ours opens. True if a press interrupted it.
+ */
+static bool speak_local(const char *text)
+{
+    static int16_t buf[MUSE_AUDIO_CHUNK];
+    static const int16_t silence[MUSE_AUDIO_CHUNK];
+    for (int i = 0; i < 25 && !muse_hatch_turn_dropped(); i++) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    for (int i = 0; i < 50 && muse_tts_busy(); i++) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    muse_state_set_caption("%s", text);
+    bool voiced = muse_settings_speaker_on() && muse_tts_configured() && muse_tts_begin(text, strlen(text), false);
+    int64_t t0 = esp_timer_get_time();
+    if (!voiced) {
+        /* No voice: the answer as text, for reading time. */
+        muse_state_set_mode(MUSE_MODE_SPEAKING);
+        int64_t until = t0 + 1500000 + (int64_t)strlen(text) * 1000000 / 16;
+        while (esp_timer_get_time() < until) {
+            if (got_event(MUSE_PTT_DOWN)) {
+                return true;
+            }
+            muse_audio_write(silence, MUSE_AUDIO_CHUNK);
+        }
+        return false;
+    }
+    bool started = false;
+    for (;;) {
+        if (got_event(MUSE_PTT_DOWN)) {
+            ESP_LOGI(TAG, "fast: answer interrupted");
+            muse_tts_cancel();
+            muse_state_set_level(0);
+            return true;
+        }
+        muse_tts_state_t st = muse_tts_state(NULL);
+        size_t have = muse_tts_pending();
+        if (!started) {
+            /* 300 ms in before the speaker starts, as Muse's replies (Wi-Fi bursts). */
+            if (st == MUSE_TTS_RUNNING && have < MUSE_AUDIO_RATE * 3 / 10 && esp_timer_get_time() - t0 < 3000000) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            started = true;
+            muse_state_set_mode(MUSE_MODE_SPEAKING);
+            ESP_LOGI(TAG, "fast: first_audio=%dms after release", (int)((esp_timer_get_time() - s_release_us) / 1000));
+        }
+        size_t n = muse_tts_read(buf, MUSE_AUDIO_CHUNK);
+        if (n) {
+            muse_state_set_level(muse_audio_level(buf, n));
+            muse_audio_write(buf, n);
+        } else if (st != MUSE_TTS_RUNNING && !muse_tts_pending()) {
+            break;
+        } else {
+            muse_state_set_level(0);
+            muse_audio_write(silence, MUSE_AUDIO_CHUNK);   /* keep the speaker fed */
+        }
+    }
+    muse_state_set_level(0);
+    return false;
+}
+
+/* While Muse's turn runs: the atajo's answer, if it came first. Returns 1 to
+ * stop (answered locally: *interrupted says if a press cut it), else 0. */
+static int fast_check(bool muse_started, bool *delivered, bool *interrupted)
+{
+    if (!s_fast_asked) {
+        return 0;
+    }
+    if (muse_started) {
+        jolly_fast_ask_cancel();   /* Muse was first: never two answers */
+        s_fast_asked = false;
+        ESP_LOGI(TAG, "fast: Muse answered first");
+        return 0;
+    }
+    jolly_fast_answer_t a;
+    jolly_fast_state_t st = jolly_fast_ask_poll(&a);
+    if (st == JFA_PENDING) {
+        return 0;
+    }
+    s_fast_asked = false;
+    if (st != JFA_LOCAL) {
+        return 0;   /* forward, error or late: Muse's turn carries on as always */
+    }
+    ESP_LOGI(TAG, "fast: answered on the board; Muse's turn dropped");
+    muse_hatch_turn_drop();
+    *delivered = true;   /* nothing to keep for later: answered */
+    *interrupted = speak_local(a.text);
+    memset(&a, 0, sizeof(a));
+    return 1;
+}
+
+/* Muse out of reach (the note is kept for later): the atajo alone. True if
+ * a press interrupted it; *delivered if it answered. */
+static bool fast_only(bool *delivered)
+{
+    muse_state_set_mode(MUSE_MODE_THINKING);
+    for (;;) {
+        if (got_event(MUSE_PTT_DOWN)) {
+            jolly_fast_ask_cancel();
+            s_fast_asked = false;
+            return true;
+        }
+        jolly_fast_answer_t a;
+        jolly_fast_state_t st = jolly_fast_ask_poll(&a);
+        if (st == JFA_LOCAL) {
+            s_fast_asked = false;
+            *delivered = true;   /* answered: the note isn't kept to send later */
+            bool interrupted = speak_local(a.text);
+            memset(&a, 0, sizeof(a));
+            return interrupted;
+        }
+        if (st != JFA_PENDING) {
+            s_fast_asked = false;
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+#endif
+
 static bool hatch_reply_as(bool *delivered, bool pushed)
 {
     if (!pushed) {
@@ -404,6 +540,12 @@ static bool hatch_reply_as(bool *delivered, bool pushed)
                 break;
             }
         }
+#if FAST
+        bool fast_interrupted = false;
+        if (fast_check(speaking || replied, delivered, &fast_interrupted)) {
+            return fast_interrupted;
+        }
+#endif
         if (got_event(MUSE_PTT_DOWN)) {
             ESP_LOGI(TAG, "reply interrupted");
             muse_hatch_turn_cancel();
@@ -777,6 +919,12 @@ static bool finish_note(void)
             fed = true;
         }
         muse_audio_chirp(0);
+#if FAST
+        /* Parallel mode: the note went to Muse live, as always; the atajo
+         * hears it too, and answers first if it can (fast_check). */
+        s_release_us = esp_timer_get_time();
+        s_fast_asked = jolly_fast_ask_start(s_rec, s_rec_n);
+#endif
         if (s_live && !fed) {
             /* Hatch is behind (still connecting, say): the rest from the kept note. */
             muse_state_set_mode(MUSE_MODE_THINKING);
@@ -789,6 +937,15 @@ static bool finish_note(void)
         if (fed) {
             interrupted = hatch_reply(&delivered);
         }
+#if FAST
+        else if (s_fast_asked) {
+            interrupted = fast_only(&delivered);
+        }
+        if (s_fast_asked) {
+            jolly_fast_ask_cancel();   /* its answer no longer matters */
+            s_fast_asked = false;
+        }
+#endif
         if (delivered || interrupted) {
             drop_rec();
         } else {

@@ -203,6 +203,37 @@ static void late_message() {
     turn_finish();
     s_push = false;
 }
+/* The atajo answered locally (parallel mode): Muse's reply to that turn,
+ * in it or late, is never played. */
+static void dropped_turn() {
+    char texts[MAX_MSGS * TEXT_MAX] = {};
+    s_turn.texts = texts;
+    begin();                                       /* acked: user ids "note" and "parent" */
+    suppress_turn_replies(now_us());
+    turn_finish();
+    s_push = false;
+    event("message.assistant", "late", "note", "Muse's own answer.");
+    assert(!s_push && s_turn.phase == P_IDLE);     /* a late reply to it: not played */
+    event("delta.message_start", "x", "", "");     /* nor anything without a parent, for a while */
+    assert(!s_push && s_turn.phase == P_IDLE);
+    /* A new turn: a reply to the dropped note is still refused. */
+    begin();
+    strlcpy(s_turn.user_ids[0], "new", sizeof(s_turn.user_ids[0]));
+    s_turn.user_ids[1][0] = '\0';
+    event("message.assistant", "old", "note", "Muse's own answer.");
+    assert(s_turn.nmsgs == 0);
+    event("message.assistant", "mine", "new", "The new answer.");
+    assert(s_turn.nmsgs == 1);
+    /* Once the window is over, late messages play again. */
+    turn_finish();
+    s_push = false;
+    s_drop_until_us = now_us() - 1;
+    event("message.assistant", "later", "", "Later news.");
+    assert(s_push);
+    turn_finish();
+    s_push = false;
+    memset(s_drop_ids, 0, sizeof(s_drop_ids));
+}
 int main(int argc, char **argv) {
     assert(argc == 2);
     switch (atoi(argv[1])) {
@@ -211,6 +242,7 @@ int main(int argc, char **argv) {
     case 2: bounded_rejections(); break;
     case 3: speech_queue(); break;
     case 4: late_message(); break;
+    case 5: dropped_turn(); break;
     default: return 2;
     }
 }
@@ -251,3 +283,6 @@ int main(int argc, char **argv) {
 
     def test_late_message_after_the_turn_is_played_and_spoken_early(self):
         self.run_case(4)
+
+    def test_a_turn_answered_locally_never_plays_muses_reply(self):
+        self.run_case(5)
