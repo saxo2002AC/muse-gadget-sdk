@@ -237,6 +237,15 @@ front. `>imu` shows which way gravity reads once it's fitted.
   on every lease and every 5 s, since a DHCP renewal sets the router's again
   without an event. The chat connect also resolves its server with two quick
   retries (0.3 s, 1 s) before a turn fails. `.local` names still go by mDNS.
+- **Speech:** a reply is spoken from its first whole sentence (20+
+  characters) while the rest is still arriving, then sentence by sentence
+  (80+ characters a request, 600 at most; `muse_speech_split.c`), so a long
+  story is spoken whole up to 8191 bytes (a longer one is logged and cut).
+  A message Muse sends after the turn ended (the story after "sure, here's
+  one") is played like a reply: queued after anything speaking, quiet hours
+  leave it unspoken, a press interrupts it. The chat stays subscribed
+  between turns on this board (no 10-minute idle close); what arrives in
+  the first 3 s after subscribing is backlog and isn't played.
 - **Freezes:** a silent hang (no log, no heartbeat) reboots with backtraces
   instead: `muse_hang.c` watches the UI's frame (20 s) and Link's heartbeat
   (90 s) and prints every task's backtrace before aborting; the overlay also

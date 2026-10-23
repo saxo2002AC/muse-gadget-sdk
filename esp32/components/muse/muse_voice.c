@@ -37,6 +37,10 @@
 #include "muse_settings.h"
 #include "muse_state.h"
 #include "muse_wifi.h"
+#if CONFIG_MUSE_JOLLY
+#include "esp_attr.h"
+#include "jolly/jolly_client.h"
+#endif
 
 static const char *TAG = "muse_voice";
 
@@ -351,10 +355,12 @@ static void go_idle(const char *caption);
  * Plays Hatch's reply as it arrives, with its text as the caption. Returns
  * true if interrupted by a new press. *delivered: the VM has the note.
  */
-static bool hatch_reply(bool *delivered)
+static bool hatch_reply_as(bool *delivered, bool pushed)
 {
-    muse_state_set_mode(MUSE_MODE_THINKING);
-    muse_state_set_caption("SENDING VOICE NOTE");   /* until there's a transcript or reply */
+    if (!pushed) {
+        muse_state_set_mode(MUSE_MODE_THINKING);
+        muse_state_set_caption("SENDING VOICE NOTE");   /* until there's a transcript or reply */
+    }
     static int16_t buf[MUSE_AUDIO_CHUNK];
     static const int16_t silence[MUSE_AUDIO_CHUNK];
     char text[96];
@@ -434,6 +440,45 @@ static bool hatch_reply(bool *delivered)
         vTaskDelay(pdMS_TO_TICKS(2500));
     }
     return false;
+}
+
+static bool hatch_reply(bool *delivered)
+{
+    return hatch_reply_as(delivered, false);
+}
+
+/* Muse's quiet hours: on Jolly, the Guardián's (a late message isn't spoken then). */
+static bool quiet_now(void)
+{
+#if CONFIG_MUSE_JOLLY
+    EXT_RAM_BSS_ATTR static jolly_glance_t g;   /* not on the voice task's stack, nor internal RAM */
+    jolly_linkstate_t link;
+    return jolly_client_snapshot(&g, &link) && link.link == JL_OK && g.quiet;
+#else
+    return false;
+#endif
+}
+
+/*
+ * A message Muse sent after the turn ended (muse_hatch_push_waiting): played
+ * like a reply, unless it's quiet hours. True if a press interrupted it: that
+ * press is the next recording's.
+ */
+static bool play_pushed(void)
+{
+    if (quiet_now()) {
+        ESP_LOGI(TAG, "a late message from Muse, unspoken: quiet hours");
+        muse_hatch_turn_cancel();
+        return false;
+    }
+    ESP_LOGI(TAG, "a late message from Muse: speaking it");
+    muse_state_poke();   /* wake the screen for its captions */
+    bool delivered;
+    bool interrupted = hatch_reply_as(&delivered, true);
+    if (!interrupted && muse_state_mode(NULL) != MUSE_MODE_IDLE) {
+        go_idle("");
+    }
+    return interrupted;
 }
 
 static void go_idle(const char *caption)
@@ -849,6 +894,14 @@ static void voice_task(void *arg)
                 s_loopback = false;
                 muse_audio_loopback_test(muse_settings_volume());
                 pre_reset();
+            }
+            if (muse_hatch_push_waiting()) {
+                if (play_pushed()) {
+                    pending_down = true;   /* a press cut it short: record it */
+                    pre_reset();
+                    continue;
+                }
+                pre_reset();   /* its own sound isn't pre-roll */
             }
             /* The 20 ms read paces this loop. */
             idle_capture();

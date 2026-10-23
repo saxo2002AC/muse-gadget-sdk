@@ -24,18 +24,21 @@ class ChatSession(unittest.TestCase):
         constants = source[source.index('#define MIC_RATE'):source.index('/* ---- Voice task')]
         types = source[source.index('enum phase_t'):source.index('/* 10 KB')]
         handlers = source[source.index('static int find_msg('):source.index('static void on_chat_ack(')]
-        reset = source[source.index('static bool turn_start('):source.index('static void turn_begin(')]
+        reset = source[source.index('static void turn_clear('):source.index('static void turn_begin(')]
         code = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
 #include <initializer_list>
 #include "host_compat.h"
+#include "muse_speech_split.h"
 #include "cJSON.h"
 #include "minimp3.h"
 #include "muse_chat_priv.h"
+#define CONFIG_MUSE_ENABLED 1
 #define ESP_LOGI(...) ((void)0)
 #define ESP_LOGW(tag, ...) ((void)(tag))
 static const char *TAG = "test";
@@ -44,6 +47,9 @@ static bool muse_tts_configured() { return tts_set; }
 static bool muse_settings_speaker_on() { return speaker_on; }
 ''' + constants + types + r'''
 static turn_t s_turn;
+static std::atomic<uint32_t> s_gen{0};
+static std::atomic<bool> s_push{false};
+static int64_t s_sub_us = -10000000;   /* subscribed long ago: what arrives now is news */
 static char s_reply_shown[EV_TEXT];
 static int64_t s_last_seq, s_marks[4];
 static int captions, console_events;
@@ -159,6 +165,44 @@ static void speech_queue() {
     speaker_on = true;
     tts_set = false;
 }
+/* Muse's story after the turn ended: a reply of its own, spoken from its
+ * first whole sentence while the rest arrives, and queued once. */
+static void late_message() {
+    char texts[MAX_MSGS * TEXT_MAX] = {};
+    s_turn.texts = texts;
+    tts_set = true;
+    begin();
+    event("message.assistant", "a", "note", "Perfecto, si te la creo.");
+    turn_finish();
+    s_push = false;
+    assert(s_turn.phase == P_IDLE);
+    event("delta.message_start", "story", "someone-else");
+    assert(s_push && s_turn.push && s_turn.phase == P_WAIT_REPLY);
+    assert(s_turn.nmsgs == 1 && !strcmp(s_turn.msgs[0].id, "story"));
+    event("delta.text_append", "story", "", "Hab");
+    assert(s_turn.msgs[0].tts == TTS_NONE);                     /* no whole sentence yet */
+    event("delta.text_append", "story", "", "ia una vez una nina muy curiosa. Un dia");
+    assert(s_turn.msgs[0].tts == TTS_QUEUED && speaking() == 1);   /* starts on the first sentence */
+    event("delta.text_append", "story", "", " fue al bosque.");
+    event("delta.message_done", "story");
+    assert(s_turn.msgs[0].done && speaking() == 1);              /* not queued twice */
+    /* Right after subscribing, what arrives is the backlog: not played. */
+    turn_finish();
+    s_push = false;
+    int64_t was = s_sub_us;
+    s_sub_us = now_us();
+    event("message.assistant", "old", "", "Old news.");
+    assert(!s_push && s_turn.phase == P_IDLE);
+    s_sub_us = was;
+    /* Speaker off: a late message is still taken, shown as text once done. */
+    speaker_on = false;
+    event("message.assistant", "late", "", "Shown.");
+    assert(s_push && s_turn.nmsgs == 1 && s_turn.msgs[0].done && !speaking());
+    speaker_on = true;
+    tts_set = false;
+    turn_finish();
+    s_push = false;
+}
 int main(int argc, char **argv) {
     assert(argc == 2);
     switch (atoi(argv[1])) {
@@ -166,6 +210,7 @@ int main(int argc, char **argv) {
     case 1: valid_parents(); break;
     case 2: bounded_rejections(); break;
     case 3: speech_queue(); break;
+    case 4: late_message(); break;
     default: return 2;
     }
 }
@@ -177,8 +222,10 @@ int main(int argc, char **argv) {
         commands = [
             [*shlex.split(os.environ.get('CC', 'cc')), '-std=c11', *flags,
              '-c', str(JSON / 'cJSON.c'), '-o', str(out / 'cjson.o')],
+            [*shlex.split(os.environ.get('CC', 'cc')), '-std=c11', *flags,
+             '-c', str(ROOT / 'components/muse/muse_speech_split.c'), '-o', str(out / 'split.o')],
             [*shlex.split(os.environ.get('CXX', 'c++')), '-std=gnu++17', *flags,
-             str(out / 'session.cpp'), str(out / 'cjson.o'), '-o', str(out / 'session')],
+             str(out / 'session.cpp'), str(out / 'cjson.o'), str(out / 'split.o'), '-o', str(out / 'session')],
         ]
         for command in commands:
             result = subprocess.run(command, capture_output=True, text=True)
@@ -201,3 +248,6 @@ int main(int argc, char **argv) {
 
     def test_finished_messages_queue_for_speech_in_order_and_bounded(self):
         self.run_case(3)
+
+    def test_late_message_after_the_turn_is_played_and_spoken_early(self):
+        self.run_case(4)

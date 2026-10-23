@@ -71,6 +71,7 @@ extern "C" {
 #include "muse_link.h"
 #include "muse_settings.h"
 #include "muse_resolve.h"
+#include "muse_speech_split.h"
 #include "muse_tts.h"
 #include "muse_wifi.h"
 }
@@ -108,14 +109,29 @@ static const char *TAG = "muse_chat_session";
 #define MP3_POLL_ROOM (SCRATCH + 8192)     /* stop reading the socket below this much MP3 room */
 static_assert(MP3_BUF > MP3_POLL_ROOM + MP3_HOLD, "reads would stall with the MP3 buffer empty");
 #define EV_TEXT 72
+#if CONFIG_MUSE_JOLLY
+#define TEXT_MAX 8192                      /* a message's text: long stories are spoken whole, in pieces */
+#else
 #define TEXT_MAX 1024                      /* a message's text, for captions timed to its speech */
+#endif
+#define SPEECH_FIRST_MIN 20                /* the first piece to speak: a sentence this long starts it */
+#define SPEECH_MIN 80                      /* later pieces: sentences together, fewer requests */
+#define SPEECH_PART_MAX 600                /* one TTS request at most (the server takes 4000 bytes) */
+#ifndef CONFIG_MUSE_ENABLED
+#define CONFIG_MUSE_ENABLED 0
+#endif
+#define PUSH_SETTLE_US (3 * 1000000LL)     /* after subscribing: what arrives is the backlog, not news */
 #define SPEECH_CHARS_PER_S 14              /* until the speech's length is known */
 #define TEXT_CHARS_PER_S 16                /* speaker off: reading pace, a little over speech */
 #define TEXT_HOLD_S 2                      /* speaker off: how long a message's last lines stay up */
 
 #define PING_US (20 * 1000000LL)
 #define DEAD_US (60 * 1000000LL)           /* nothing from the server, pongs included */
+#if CONFIG_MUSE_JOLLY
+#define IDLE_CLOSE_US INT64_MAX            /* always on power: stay subscribed for Muse's late messages */
+#else
 #define IDLE_CLOSE_US (10 * 60 * 1000000LL)
+#endif
 #define AUTO_RETRY_MIN_US (5 * 1000000LL)  /* connecting without a turn, after a failure */
 #define AUTO_RETRY_MAX_US (120 * 1000000LL)
 #define FINAL_TIMEOUT_US (15 * 1000000LL)  /* release -> final transcript */
@@ -158,6 +174,8 @@ static QueueHandle_t s_cmds, s_events;
 static StreamBufferHandle_t s_in, s_out;
 static std::atomic<uint32_t> s_gen{0};
 static std::atomic<bool> s_resting{false};
+static std::atomic<bool> s_push{false};   /* a pushed message is waiting to be played */
+static int64_t s_sub_us;                  /* when the subscription opened */
 /*
  * Spoken replies' playback, for the log at the end of a turn. While a spoken
  * message has more speech coming, the voice task finding the reply buffer
@@ -223,6 +241,10 @@ struct msg_t {
     bool speak;              /* queued for the TTS server, not shown as text (queue_speech) */
     uint32_t pcm_start;      /* where its speech starts in the reply audio */
     uint32_t pcm_frames;     /* how long it is; 0 until the MP3 has all arrived */
+    uint32_t said;           /* bytes of its text the TTS server has had, in pieces (muse_speech_next) */
+    uint32_t part_end;       /* the piece being spoken ends here */
+    uint32_t part_pcm;       /* where that piece's speech starts */
+    bool capped;             /* longer than TEXT_MAX: the rest isn't spoken (logged once) */
 };
 
 struct resampler_t {
@@ -233,6 +255,7 @@ struct resampler_t {
 
 struct turn_t {
     phase_t phase;
+    bool push;               /* not ours: a message Muse sent after the turn ended (begin_push) */
     uint32_t gen;
     bool text;               /* typed at the console: the reply goes there, unspoken */
     bool end_requested, end_sent, chat_posted, acked;
@@ -834,6 +857,7 @@ static bool resolve_vm(char *err, size_t err_cap)
 static bool open_subscription(void)
 {
     s_last_seq = 0;
+    s_sub_us = now_us();
     s_conn.sub_id = open_stream(K_SUB, "POST", "/chat/subscribe", "application/json", "application/x-ndjson", "{}",
                                 true);
     return s_conn.sub_id != 0;
@@ -1024,6 +1048,8 @@ static void turn_finish(void)
 {
     turn_reset_streams();
     s_turn.phase = P_IDLE;
+    s_turn.push = false;
+    s_push = false;
     s_turn.dict_id = s_turn.chat_id = 0;
     s_turn.tts_msg = -1;
     s_turn.silent = false;
@@ -1065,16 +1091,9 @@ static void turn_done(bool complete)
     turn_finish();
 }
 
-/* Ends any turn in progress and starts a fresh one. False if Hatch can't be reached. */
-static bool turn_start(uint32_t gen, bool text)
+/* A fresh turn's state, keeping the buffers. */
+static void turn_clear(uint32_t gen, bool text)
 {
-    if (s_turn.phase != P_IDLE) {
-        if (s_turn.text) {
-            turn_fail("INTERRUPTED");
-        } else {
-            turn_finish();
-        }
-    }
     uint8_t *chunk = s_turn.chunk, *mp3 = s_turn.mp3, *note = s_turn.note;
     char *texts = s_turn.texts;
     s_turn = turn_t{};
@@ -1088,6 +1107,35 @@ static bool turn_start(uint32_t gen, bool text)
     memset(s_marks, 0, sizeof(s_marks));
     s_reply_shown[0] = '\0';
     s_turn.start_us = now_us();
+}
+
+/*
+ * A message Muse sends after the turn ended (the story after "sure, here's
+ * one", a reminder): it becomes a reply-only turn of its own, spoken like any
+ * reply. The voice task plays it (muse_hatch_push_waiting); a press ends it.
+ */
+static void begin_push(void)
+{
+    turn_clear(s_gen.load(), false);
+    s_turn.push = true;
+    s_turn.acked = true;
+    s_turn.chat_us = s_turn.start_us;
+    s_turn.phase = P_WAIT_REPLY;
+    s_push = true;
+    ESP_LOGI(TAG, "a message from Muse after the turn: playing it as a reply");
+}
+
+/* Ends any turn in progress and starts a fresh one. False if Hatch can't be reached. */
+static bool turn_start(uint32_t gen, bool text)
+{
+    if (s_turn.phase != P_IDLE) {
+        if (s_turn.text) {
+            turn_fail("INTERRUPTED");
+        } else {
+            turn_finish();
+        }
+    }
+    turn_clear(gen, text);
     resampler_init(&s_turn.up, MIC_RATE, DICT_RATE);
     if (!ensure_connected()) {
         turn_fail(muse_hatch_configured() ? "CAN'T REACH MUSE" : "MUSE NOT SET UP");
@@ -1390,12 +1438,13 @@ static int bind_msg(const char *id, cJSON *payload)
     if (!parent) {
         parent = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "parent_message_id"));
     }
-    /* Once the ack names our message, replies to anything else are someone else's. */
-    if (parent && parent[0] && s_turn.acked && !is_user_id(parent) && find_msg(parent) < 0) {
+    /* Once the ack names our message, replies to anything else are someone else's.
+     * A pushed message answers nothing of ours: any assistant message goes. */
+    if (!s_turn.push && parent && parent[0] && s_turn.acked && !is_user_id(parent) && find_msg(parent) < 0) {
         muse_chat_reject(&s_turn.rejected, id);
         return -1;
     }
-    if ((!parent || !parent[0]) && s_turn.rejected.overflow) {
+    if (!s_turn.push && (!parent || !parent[0]) && s_turn.rejected.overflow) {
         return -1;
     }
     if (s_turn.nmsgs == MAX_MSGS) {
@@ -1410,6 +1459,10 @@ static int bind_msg(const char *id, cJSON *payload)
 static void append_text(msg_t &m, const char *text)
 {
     size_t add = strlen(text);
+    if (!m.capped && m.len + add > TEXT_MAX - 1) {
+        m.capped = true;
+        ESP_LOGW(TAG, "message %s is over %d bytes: only the first are kept and spoken", m.id, TEXT_MAX - 1);
+    }
     if (s_turn.texts) {
         char *full = s_turn.texts + (&m - s_turn.msgs) * TEXT_MAX;
         if (!m.len) {
@@ -1495,6 +1548,25 @@ static void queue_speech(int i)
     ESP_LOGI(TAG, "tts queue: message %s queued, %d pending", m.id, pending + 1);
 }
 
+/*
+ * Speaks a message from its first whole sentence on, while the rest is still
+ * arriving (start_tts goes on piece by piece). Only with a TTS server and the
+ * speaker on: otherwise a message is shown whole, once it's done.
+ */
+static void queue_early(int i)
+{
+    msg_t &m = s_turn.msgs[i];
+    if (m.tts != TTS_NONE || !s_turn.texts || !muse_tts_configured() || !muse_settings_speaker_on()) {
+        return;
+    }
+    const char *text = s_turn.texts + i * TEXT_MAX;
+    size_t stored = strlen(text);
+    if (muse_speech_next(text, 0, stored, false, SPEECH_FIRST_MIN, SPEECH_PART_MAX) > 0) {
+        m.tts = TTS_QUEUED;
+        queue_speech(i);
+    }
+}
+
 static void message_done(int i, const char *final_text)
 {
     msg_t &m = s_turn.msgs[i];
@@ -1549,11 +1621,18 @@ static void on_event(cJSON *line)
         }
         s_last_seq = v > s_last_seq ? v : s_last_seq;
     }
+    const char *event = cJSON_GetStringValue(cJSON_GetObjectItem(line, "event")) ?: "";
+    cJSON *payload = cJSON_GetObjectItem(line, "payload");
+    /* Only where muse_voice plays them (muse_hatch_push_waiting); the Voice
+     * PE's voice.c doesn't, and an unplayed one would hold the session. */
+    if (CONFIG_MUSE_ENABLED && s_turn.phase == P_IDLE && now_us() - s_sub_us > PUSH_SETTLE_US &&
+        (!strcmp(event, "delta.message_start") || !strcmp(event, "delta.text_append") ||
+         !strcmp(event, "delta.message_done") || !strcmp(event, "message.assistant"))) {
+        begin_push();
+    }
     if (s_turn.phase != P_WAIT_REPLY) {
         return;
     }
-    const char *event = cJSON_GetStringValue(cJSON_GetObjectItem(line, "event")) ?: "";
-    cJSON *payload = cJSON_GetObjectItem(line, "payload");
 
     if (!strcmp(event, "agent.status") || !strcmp(event, "task.status")) {
         const char *code = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "activity_code"));
@@ -1594,6 +1673,7 @@ static void on_event(cJSON *line)
             mark(M_TEXT);
             append_text(m, text);
             show_reply_start(m);   /* ignored once the speech starts */
+            queue_early(i);
         }
     } else if (done || full) {
         const char *text = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "display_text"));
@@ -1629,10 +1709,71 @@ static void on_chat_ack(stream_t *s)
 
 /* ---- Turn: speech ---- */
 
+enum part_t { PART_STARTED, PART_NOT_READY, PART_FAILED };
+
+/* Sends message i's next piece, [said, end), to the TTS server. */
+static part_t speak_part(int i)
+{
+    msg_t &m = s_turn.msgs[i];
+    const char *text = s_turn.texts + i * TEXT_MAX;
+    size_t stored = strlen(text);
+    size_t end = muse_speech_next(text, m.said, stored, m.done, m.said ? SPEECH_MIN : SPEECH_FIRST_MIN, SPEECH_PART_MAX);
+    if (end <= m.said) {
+        return PART_NOT_READY;
+    }
+    if (!muse_tts_begin(text + m.said, end - m.said, false)) {
+        return PART_FAILED;
+    }
+    m.part_end = (uint32_t)end;
+    m.part_pcm = s_turn.pcm_out;
+    s_turn.spoken = true;
+    s_turn.speech_started = false;
+    s_turn.any_speech = true;
+    s_turn.speech_us = now_us();
+    mark(M_TTS);
+    ESP_LOGI(TAG, "speaking message %s, bytes %u..%u of %u%s", m.id, (unsigned)m.said, (unsigned)end,
+             (unsigned)stored, m.done ? "" : " (still arriving)");
+    return PART_STARTED;
+}
+
+/* The rest of message i goes as text, at reading pace. */
+static void rest_as_text(int i)
+{
+    msg_t &m = s_turn.msgs[i];
+    size_t stored = s_turn.texts ? strlen(s_turn.texts + i * TEXT_MAX) : m.len;
+    size_t rest = stored > m.said ? stored - m.said : 0;
+    m.pcm_frames = (s_turn.pcm_out - m.pcm_start) + (uint32_t)(rest * MIC_RATE / TEXT_CHARS_PER_S);
+    m.said = (uint32_t)stored;
+    m.speak = false;
+    s_turn.spoken = false;
+    s_turn.silent = true;
+}
+
 static void start_tts(void)
 {
     if (s_turn.tts_msg >= 0) {
-        return;
+        /* A message spoken in pieces, between two of them. */
+        int i = s_turn.tts_msg;
+        msg_t &m = s_turn.msgs[i];
+        if (s_turn.spoken || s_turn.silent || !m.speak || muse_tts_busy()) {
+            return;   /* a piece playing, shown as text, or the last request still closing */
+        }
+        part_t r = speak_part(i);
+        if (r == PART_STARTED) {
+            return;
+        }
+        if (r == PART_FAILED) {
+            ESP_LOGW(TAG, "tts: the next piece of message %s didn't start; the rest is text", m.id);
+            rest_as_text(i);
+            return;
+        }
+        if (!m.done) {
+            return;   /* the next sentence isn't whole yet */
+        }
+        m.pcm_frames = s_turn.pcm_out - m.pcm_start;
+        m.tts = TTS_FINISHED;
+        s_turn.tts_msg = -1;
+        ESP_LOGI(TAG, "spoke message %s (%.1fs)", m.id, (double)m.pcm_frames / MIC_RATE);
     }
     for (int i = 0; i < s_turn.nmsgs; i++) {
         msg_t &m = s_turn.msgs[i];
@@ -1641,15 +1782,11 @@ static void start_tts(void)
         }
         /*
          * With a TTS server set (muse_tts.h) and the speaker on, the message's
-         * text goes to it and pump_speech() plays what it streams back. Else,
-         * or if it can't start, replies are text, shown at reading pace:
-         * silence in place of speech paces the captions and ends the turn.
-         * (A TTS API that returns MP3 would go through tts_data() and decode()
-         * instead: keep m.tts = TTS_ACTIVE and s_turn.tts_msg = i, set
-         * m.pcm_start = s_turn.pcm_out, m.pcm_frames = 0, s_turn.mp3_len = 0,
-         * s_turn.mp3_ended = false, s_turn.kbps = 0, s_turn.down_rate = 0,
-         * mp3dec_init(&s_turn.dec), pass the MP3 to tts_data() as it arrives
-         * and set s_turn.mp3_ended at the end.)
+         * text goes to it piece by piece (muse_speech_next: sentences, from
+         * the first whole one, even before the message is done) and
+         * pump_speech() plays what it streams back. Else, or if it can't
+         * start, replies are text, shown at reading pace: silence in place of
+         * speech paces the captions and ends the turn.
          */
         const char *text = s_turn.texts ? s_turn.texts + i * TEXT_MAX : nullptr;
         size_t stored = text ? strlen(text) : 0;
@@ -1660,26 +1797,30 @@ static void start_tts(void)
         if (m.speak && muse_tts_busy()) {
             return;   /* the last request is still closing: this one waits its turn */
         }
-        if (m.speak && stored && muse_tts_begin(text, stored, m.len > stored)) {
+        if (m.speak && stored) {
             m.pcm_start = s_turn.pcm_out;
             m.pcm_frames = 0;   /* known once the speech has all arrived */
-            m.tts = TTS_ACTIVE;
-            s_turn.tts_msg = i;
-            s_turn.silent = false;
-            s_turn.spoken = true;
-            s_turn.speech_started = false;
-            s_turn.any_speech = true;
-            s_turn.speech_us = now_us();
-            mark(M_TTS);
-            int oldest;
-            ESP_LOGI(TAG, "speaking message %s (%u chars); tts queue: %d pending", m.id, (unsigned)m.len,
-                     speak_pending(&oldest));
-            show_reply_start(m);
-            return;
+            m.said = 0;
+            part_t r = speak_part(i);
+            if (r == PART_STARTED) {
+                m.tts = TTS_ACTIVE;
+                s_turn.tts_msg = i;
+                s_turn.silent = false;
+                int oldest;
+                ESP_LOGI(TAG, "tts queue: %d pending", speak_pending(&oldest));
+                show_reply_start(m);
+                return;
+            }
+            if (r == PART_NOT_READY && !m.done) {
+                return;   /* queued early, its first sentence not whole after all */
+            }
         }
         if (m.speak) {
             ESP_LOGW(TAG, "tts queue: message %s didn't start, as text", m.id);
             m.speak = false;
+        }
+        if (!m.done) {
+            return;   /* shown as text once it's all here */
         }
         m.pcm_start = s_turn.pcm_out;
         m.pcm_frames = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);
@@ -1781,17 +1922,13 @@ static void pump_speech(void)
         return;
     }
     s_turn.spoken = false;
-    uint32_t spoken = s_turn.pcm_out - m.pcm_start;
+    uint32_t spoken = s_turn.pcm_out - m.part_pcm;
     if (st == MUSE_TTS_ENDED && spoken) {
-        m.pcm_frames = spoken;
-        m.tts = TTS_FINISHED;
-        s_turn.tts_msg = -1;
-        ESP_LOGI(TAG, "spoke message %s (%.1fs)", m.id, (double)spoken / MIC_RATE);
+        m.said = m.part_end;   /* this piece is said: start_tts sends the next, or finishes the message */
         return;
     }
-    uint32_t reading = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);
-    m.pcm_frames = spoken > reading ? spoken : reading;
-    s_turn.silent = true;
+    int i = s_turn.tts_msg;
+    rest_as_text(i);
     if (spoken) {
         ESP_LOGW(TAG, "speech broke off after %.1fs: the rest of message %s is text", (double)spoken / MIC_RATE, m.id);
     } else {
@@ -1812,6 +1949,9 @@ static void decode(void)
     if (s_turn.silent) {
         pace_silently();
         return;
+    }
+    if (s_turn.msgs[s_turn.tts_msg].part_end) {
+        return;   /* spoken in pieces, between two: start_tts sends the next */
     }
     /*
      * minimp3 only takes a frame once it can see the next one's header. Given
@@ -1889,6 +2029,10 @@ static void check_turn(void)
             return;
         }
         turn_done(false);
+        return;
+    }
+    if (!s_turn.nmsgs && s_turn.push) {
+        turn_finish();   /* a pushed event that wasn't a message for us: nothing to play */
         return;
     }
     if (!s_turn.nmsgs) {
@@ -2301,6 +2445,11 @@ extern "C" void muse_hatch_chat_connect(void)
 extern "C" void muse_hatch_chat_forget(void)
 {
     post(CMD_FORGET, 0);
+}
+
+extern "C" bool muse_hatch_push_waiting(void)
+{
+    return s_push.load();
 }
 
 extern "C" bool muse_hatch_ready(void)

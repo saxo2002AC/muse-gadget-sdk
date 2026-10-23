@@ -88,6 +88,11 @@ void muse_hatch_turn_end(void);
 /* Abandons the turn (tap, or barge-in during the reply). */
 void muse_hatch_turn_cancel(void);
 
+/* Muse sent a message after the turn ended (a story that follows "sure",
+ * say): it's waiting to be played like a reply, with muse_hatch_turn_event()
+ * and muse_hatch_turn_read(); muse_hatch_turn_cancel() drops it. */
+bool muse_hatch_push_waiting(void);
+
 typedef enum {
     MUSE_HATCH_EV_NONE,
     MUSE_HATCH_EV_HEARD,    /* transcript so far (partial while talking, then final) */
