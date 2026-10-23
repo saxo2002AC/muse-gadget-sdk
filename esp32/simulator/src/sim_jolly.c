@@ -190,3 +190,15 @@ jolly_mood_t jolly_imu_mood(int64_t now_ms)
     (void)now_ms;
     return JM_TRANQUILO;
 }
+
+/* jolly_clock.h: the host's own clock, as synced. */
+#include <time.h>
+#include "jolly/jolly_clock.h"
+#include "jolly/jolly_text.h"
+void jolly_clock_text(char *out, size_t cap)
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    jolly_fmt_clock(true, lt.tm_hour, lt.tm_min, JOLLY_CLOCK_H12, out, cap);
+}

@@ -27,6 +27,7 @@
 #endif
 
 #include "jolly/jolly_client.h"
+#include "jolly/jolly_clock.h"
 #include "jolly/jolly_text.h"
 #include "muse_ui.h"
 
@@ -185,10 +186,29 @@ static void chip_set(chip_t *c, const char *t, jolly_tone_t tone)
 
 /* The status bar: Wi-Fi on the left, the chip on the right. No clock: the
  * board keeps no wall time. */
+/* The status bar's clock, one per tile: [0] on Jolly's face (jolly_clock.h). */
+EXT_RAM_BSS_ATTR static lv_obj_t *s_clocks[JOLLY_PAGES + 1];
+static char s_clock_shown[16];
+#define CLOCK_W 66                 /* "12:45 pm" in Montserrat 14, with room */
+
+static lv_obj_t *clock_label(lv_obj_t *tile)
+{
+    lv_obj_t *l = text(tile, &lv_font_montserrat_14, C_MUTED, "--:--");
+    lv_obj_set_width(l, CLOCK_W);
+    lv_obj_set_pos(l, PAD, 7);
+    return l;
+}
+
 static void status_bar(lv_obj_t *tile, chip_t *c)
 {
+    for (int i = 1; i <= JOLLY_PAGES; i++) {
+        if (!s_clocks[i]) {
+            s_clocks[i] = clock_label(tile);   /* pages are built in order, 1..4 */
+            break;
+        }
+    }
     lv_obj_t *wifi = text(tile, &lv_font_montserrat_14, C_MUTED, LV_SYMBOL_WIFI);
-    lv_obj_set_pos(wifi, PAD, 7);
+    lv_obj_set_pos(wifi, PAD + CLOCK_W, 7);   /* the clock first, the Wi-Fi after it */
     *c = chip(tile);
     lv_obj_align(c->bg, LV_ALIGN_TOP_RIGHT, -PAD, 3);
 }
@@ -852,6 +872,7 @@ void jolly_pages_create(lv_obj_t *tv, int first_col)
 
 void jolly_pages_face(lv_obj_t *face)
 {
+    s_clocks[0] = clock_label(face);   /* the face's own status line is centred: the corner is free */
     s_chips[0] = chip(face);
     lv_obj_align(s_chips[0].bg, LV_ALIGN_TOP_RIGHT, -PAD, 3);
 }
@@ -897,6 +918,16 @@ void jolly_pages_tick(int64_t now_ms)
         return;
     }
     s_next_refresh = now_ms + REFRESH_MS;
+    char clk[16];
+    jolly_clock_text(clk, sizeof(clk));
+    if (strcmp(clk, s_clock_shown) != 0) {   /* once a minute: only the clocks redraw */
+        strlcpy(s_clock_shown, clk, sizeof(s_clock_shown));
+        for (int i = 0; i <= JOLLY_PAGES; i++) {
+            if (s_clocks[i]) {
+                lv_label_set_text(s_clocks[i], clk);
+            }
+        }
+    }
     s_have = jolly_client_snapshot(&s_g, &s_link);
     char s[48];
     jolly_tone_t tone;

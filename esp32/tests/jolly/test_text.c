@@ -20,8 +20,35 @@
         }                                                                           \
     } while (0)
 
+/* jolly_fmt_clock: the status bar's clock, 12 h as in Orlando ("3:45 pm"),
+ * or 24 h, and "--:--" until the time is synced. */
+static void clock(void)
+{
+    char s[16];
+    struct { int h, m; const char *h12, *h24; } C[] = {
+        { 0, 5, "12:05 am", "00:05" }, { 9, 0, "9:00 am", "09:00" }, { 11, 59, "11:59 am", "11:59" },
+        { 12, 0, "12:00 pm", "12:00" }, { 15, 45, "3:45 pm", "15:45" }, { 23, 7, "11:07 pm", "23:07" },
+    };
+    for (size_t i = 0; i < sizeof(C) / sizeof(C[0]); i++) {
+        jolly_fmt_clock(true, C[i].h, C[i].m, true, s, sizeof(s));
+        if (strcmp(s, C[i].h12)) {
+            fprintf(stderr, "%d:%d -> '%s', want '%s'\n", C[i].h, C[i].m, s, C[i].h12);
+            assert(0);
+        }
+        jolly_fmt_clock(true, C[i].h, C[i].m, false, s, sizeof(s));
+        assert(!strcmp(s, C[i].h24));
+    }
+    jolly_fmt_clock(false, 15, 45, true, s, sizeof(s));
+    assert(!strcmp(s, "--:--"));
+    jolly_fmt_clock(true, 25, 0, true, s, sizeof(s));   /* out of range: not a time */
+    assert(!strcmp(s, "--:--"));
+    jolly_fmt_clock(true, 3, 60, false, s, sizeof(s));
+    assert(!strcmp(s, "--:--"));
+}
+
 int main(void)
 {
+    clock();
     EQ(jolly_fmt_ago(3, b, sizeof(b)), "hace 3 s");
     EQ(jolly_fmt_ago(59, b, sizeof(b)), "hace 59 s");
     EQ(jolly_fmt_ago(120, b, sizeof(b)), "hace 2 min");

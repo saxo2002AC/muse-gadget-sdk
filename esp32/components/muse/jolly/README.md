@@ -38,6 +38,7 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 >lcd / >lcd_orient=0|1 / >lcd_madctl=S,X,Y / >lcd_touchlog=1
 >tts_url=http://Mac-mini-de-acserver.local:3024 / >tts_key=...
 >dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, ours, forgets}
+>time                                              @time {synced, sntp, utc, local, last_sync_s}
 >dns_servers=1.1.1.1,8.8.8.8                       DNS ahead of the router's (empty: the router's only); NVS
 >whyreset                                          the last 4 setup-wipe sources with uptime, kept across resets
 ```
@@ -218,10 +219,13 @@ front. `>imu` shows which way gravity reads once it's fitted.
 
 ## Decisions
 
-- **No clock:** the firmware has no SNTP, so the status bar shows Wi-Fi and the
-  chip but no time. Every "hace N" uses the Guardián's own timestamps
-  (`glance.ts` minus the event's `t`, or the server's `age_s` fields).
-  "actualizado hace N s" is the board's own time since the last 200 or 304.
+- **Clock** (`jolly_clock.c`): SNTP from pool.ntp.org and
+  time.cloudflare.com once Wi-Fi is up (through our DNS servers), re-synced
+  every 6 h, in Orlando's time with daylight saving (`EST5EDT,M3.2.0,M11.1.0`).
+  Every status bar shows it, 12 h ("3:45 pm"), left of the Wi-Fi icon, and
+  "--:--" until synced. `>time` prints the state, UTC and local. Every "hace
+  N" still uses the Guardián's own timestamps, and "actualizado hace N s" the
+  board's own time since the last 200 or 304.
 - **Compact layout:** landscape at 320 px of height takes Muse's compact
   layout (`short_landscape`). The full layout needs about 466 px.
 - **One chip:** the status bar is the same on every page, as the plan says.

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,6 +43,10 @@ void jolly_fmt_tenths(int32_t thousandths, char *out, size_t cap);
 
 /* Megabytes as gigabytes of 1024, one decimal: swap as macOS shows it. */
 void jolly_fmt_gib(int32_t mb, char *out, size_t cap);
+
+/* The status bar's clock: "3:45 pm" (h12) or "15:45", or "--:--" when the
+ * time isn't synced or isn't one. */
+void jolly_fmt_clock(bool synced, int hour, int min, bool h12, char *out, size_t cap);
 
 /* The status bar's chip (§1.8): the link's trouble, else the alerts, else
  * "Mac Mini OK"; `glance` is NULL before the first. *tone colours it. */

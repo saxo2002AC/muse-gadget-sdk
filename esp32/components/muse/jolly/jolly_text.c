@@ -104,3 +104,14 @@ const char *jolly_word_sev(jolly_level_t sev)
 {
     return sev == JLV_CRIT ? "crítico" : sev == JLV_WARN ? "aviso" : "info";
 }
+
+void jolly_fmt_clock(bool synced, int hour, int min, bool h12, char *out, size_t cap)
+{
+    if (!synced || hour < 0 || hour > 23 || min < 0 || min > 59) {
+        snprintf(out, cap, "--:--");
+    } else if (h12) {
+        snprintf(out, cap, "%d:%02d %s", hour % 12 ? hour % 12 : 12, min, hour < 12 ? "am" : "pm");
+    } else {
+        snprintf(out, cap, "%02d:%02d", hour, min);
+    }
+}

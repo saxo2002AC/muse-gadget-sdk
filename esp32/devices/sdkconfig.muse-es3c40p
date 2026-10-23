@@ -40,6 +40,9 @@ CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
 CONFIG_ESP_INT_WDT=y
 CONFIG_ESP_INT_WDT_TIMEOUT_MS=800
 CONFIG_ESP_INT_WDT_CHECK_CPU1=y
+# Jolly's clock: SNTP from two servers, re-synced every 6 h (jolly_clock.h).
+CONFIG_LWIP_SNTP_MAX_SERVERS=2
+CONFIG_LWIP_SNTP_UPDATE_DELAY=21600000
 # Its home router's DNS drops queries: public servers first, the router's last.
 CONFIG_MUSE_DNS_SERVERS="1.1.1.1,8.8.8.8"
 CONFIG_HOMEHUB_BUTTON_GPIO=0
