@@ -81,6 +81,11 @@ void jolly_clock_start(void)
     }
 }
 
+bool jolly_clock_synced(void)
+{
+    return atomic_load(&s_synced);
+}
+
 void jolly_clock_text(char *out, size_t cap)
 {
     time_t now = time(NULL);

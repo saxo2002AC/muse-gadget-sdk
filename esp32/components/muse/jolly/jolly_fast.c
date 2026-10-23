@@ -125,11 +125,6 @@ static void answer(const char *what, const char *err)
     fflush(stdout);
 }
 
-__attribute__((weak)) const char *jolly_fast_breaker_name(void)
-{
-    return "closed";   /* until the client is in (B2) */
-}
-
 bool jolly_fast_config(jolly_fast_cfg_t *cfg)
 {
     lock();

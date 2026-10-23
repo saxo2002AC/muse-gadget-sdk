@@ -36,6 +36,9 @@ extern "C" {
 /* Sets the time zone and starts watching for Wi-Fi to start SNTP (once). */
 void jolly_clock_start(void);
 
+/* SNTP has set the time (the atajo signs requests with it). */
+bool jolly_clock_synced(void);
+
 /* The status bar's text, "3:45 pm", or "--:--" until synced. */
 void jolly_clock_text(char *out, size_t cap);
 

@@ -59,7 +59,8 @@ if(CONFIG_MUSE_ENABLED)
              "jolly/jolly_text.c" "jolly/jolly_pages.c"
              "jolly/jolly_gesture.c" "jolly/jolly_motion.c"
              "jolly/jolly_imu.c" "jolly/jolly_face_spec.c" "jolly/jolly_alarm.c"
-             "jolly/jolly_clock.c" "jolly/jolly_fast.c" "jolly/jolly_fast_auth.c")
+             "jolly/jolly_clock.c" "jolly/jolly_fast.c" "jolly/jolly_fast_auth.c"
+             "jolly/jolly_fast_parse.c" "jolly/jolly_fast_ask.c")
     endif()
     if(CONFIG_MUSE_CJK_FONT)
         list(APPEND srcs "fonts/muse_font_cjk_16.c")   # captions' CJK fallback
