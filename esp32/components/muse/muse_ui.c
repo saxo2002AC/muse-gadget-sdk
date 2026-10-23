@@ -38,6 +38,7 @@
 #include "muse_console.h"
 #include "muse_link.h"
 #include "muse_mem.h"
+#include "muse_hang.h"
 #include "muse_menu.h"
 #include "muse_pixel.h"
 #if CONFIG_MUSE_JOLLY
@@ -1810,6 +1811,7 @@ void muse_ui_request_snapshot(void)
 
 static void frame_tick(lv_timer_t *timer)
 {
+    muse_hang_kick(MUSE_HANG_UI);   /* the LVGL task is alive (muse_hang.h) */
 #if LV_USE_SNAPSHOT
     if (s_bench_page >= 0) {
         bool settings = s_bench_page != 0;

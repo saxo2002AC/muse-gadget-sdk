@@ -23,6 +23,7 @@
 #if CONFIG_MUSE_HATCH
 #include "muse_resolve.h"
 #endif
+#include "muse_hang.h"
 #include "muse_audio.h"
 #include "muse_battery.h"
 #include "muse_board.h"
@@ -97,6 +98,9 @@ void muse_app_run(const muse_board_t *board)
     }
 
     muse_hatch_start();
+#if CONFIG_MUSE_HANG_WATCHDOG
+    muse_hang_start();   /* a silent freeze reboots with every task's backtrace */
+#endif
 #if CONFIG_MUSE_HATCH
     muse_dns_start();   /* our DNS servers ahead of the router's (muse_dns.h) */
 #endif

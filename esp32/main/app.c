@@ -45,6 +45,9 @@
 #include "identity.h"
 #include "sdk_token_console.h"
 #include "reset_note.h"
+#if CONFIG_MUSE_ENABLED
+#include "muse_hang.h"
+#endif
 #include "config_store.h"
 #include "wifi_mgr.h"
 #include "wifi_known.h"
@@ -2877,6 +2880,7 @@ void app_run(void) {
         }
 
 #if CONFIG_MUSE_ENABLED
+        muse_hang_kick(MUSE_HANG_APP);   // the heartbeat is alive (muse_hang.h)
         muse_keep_vm_session();
 #endif
 

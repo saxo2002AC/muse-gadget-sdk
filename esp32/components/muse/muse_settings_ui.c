@@ -327,6 +327,11 @@ static lv_obj_t *slider(lv_obj_t *list, const char *text, int lo, int hi, int va
     lv_obj_set_style_bg_color(s, lv_color_hex(COLOR_TEXT), LV_PART_KNOB);
     lv_obj_set_style_pad_all(s, 6, LV_PART_KNOB);
     lv_obj_set_ext_click_area(s, 16);
+#if CONFIG_MUSE_JOLLY
+    /* Only the knob takes a touch: a tap on the bar or a swipe across it
+     * (scrolling, or between tiles in landscape) set the mic gain to 0 dB. */
+    lv_obj_add_flag(s, LV_OBJ_FLAG_ADV_HITTEST);
+#endif
     lv_obj_add_event_cb(s, cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s, cb, LV_EVENT_RELEASED, NULL);
 
@@ -889,7 +894,24 @@ static void on_link_reset(lv_event_t *e)
         return;
     }
     s_link_reset_armed_us = now;
+#if CONFIG_MUSE_JOLLY
+    set_text(s_link_reset_lbl, "Hold again to reset");
+#else
     set_text(s_link_reset_lbl, "Tap again to reset");
+#endif
+}
+
+/* On the landscape board, rows that rewrite Muse's setup open on a hold, not
+ * a tap: a stray tap stored "hatch.metaaivm.com:" as the server once. */
+static void hold_to_use(lv_obj_t *o, lv_event_cb_t cb)
+{
+#if CONFIG_MUSE_JOLLY
+    lv_obj_remove_event_cb(o, cb);
+    lv_obj_add_event_cb(o, cb, LV_EVENT_LONG_PRESSED, NULL);
+#else
+    (void)o;
+    (void)cb;
+#endif
 }
 
 static void build_hatch_page(lv_obj_t *tile)
@@ -898,9 +920,9 @@ static void build_hatch_page(lv_obj_t *tile)
     s_hatch = page(tile, "MUSE", true, &list);
     s_link_reset_armed_us = 0;
     s_link_status = note(list, "");
-    button(list, "Reset pairing", COLOR_DANGER, on_link_reset, &s_link_reset_lbl);
+    hold_to_use(button(list, "Reset pairing", COLOR_DANGER, on_link_reset, &s_link_reset_lbl), on_link_reset);
     s_hatch_status = note(list, "");
-    row(list, NULL, "Server", &s_hatch_host, on_hatch_host, NULL);
+    hold_to_use(row(list, NULL, "Server", &s_hatch_host, on_hatch_host, NULL), on_hatch_host);
     row(list, NULL, "VM ID", &s_hatch_vm, on_hatch_vm, NULL);
     row(list, NULL, "Device token", &s_hatch_token, on_hatch_token, NULL);
     row(list, NULL, "SDK token", &s_hatch_sdk_token, on_hatch_sdk_token, NULL);
@@ -908,7 +930,11 @@ static void build_hatch_page(lv_obj_t *tile)
     note(list, "Pair with the Muse app to use your account; a device token here overrides it, and a long one is "
                "easier to send over Bluetooth. The VM ID picks one of your VMs. The SDK token is from "
                "gadgets.muse.ai; one set here replaces the firmware's. "
-               "Reset pairing forgets Wi-Fi and the app pairing, then restarts.");
+               "Reset pairing forgets Wi-Fi and the app pairing, then restarts."
+#if CONFIG_MUSE_JOLLY
+               " Hold Server or Reset pairing to use them."
+#endif
+               );
 }
 
 static void tick_hatch(void)

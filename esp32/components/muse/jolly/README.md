@@ -229,6 +229,15 @@ front. `>imu` shows which way gravity reads once it's fitted.
   on every lease and every 5 s, since a DHCP renewal sets the router's again
   without an event. The chat connect also resolves its server with two quick
   retries (0.3 s, 1 s) before a turn fails. `.local` names still go by mDNS.
+- **Freezes:** a silent hang (no log, no heartbeat) reboots with backtraces
+  instead: `muse_hang.c` watches the UI's frame (20 s) and Link's heartbeat
+  (90 s) and prints every task's backtrace before aborting; the overlay also
+  turns on the task watchdog with panic (idle tasks on both cores, 15 s) and
+  the interrupt watchdog (800 ms). After pulling, delete the build's
+  generated `sdkconfig` so the overlay applies.
+- **Settings by touch:** on this board the sliders take only their knob (a
+  tap on the bar set the mic gain to 0 dB), and Server and Reset pairing
+  open on a hold, not a tap.
 - **mDNS:** `.local` names are resolved through lwIP's one-shot query
   (`CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES`), so there's no mdns component.
 

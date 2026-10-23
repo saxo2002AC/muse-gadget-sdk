@@ -1104,7 +1104,7 @@ void jolly_eyes_tick(int64_t now_ms, float level)
         return;
     }
     s_now = now_ms;
-    s_level = level < 0 ? 0 : level > 1 ? 1 : level;
+    s_level = !isfinite(level) || level < 0 ? 0 : level > 1 ? 1 : level;   /* NaN would poison the springs */
     if (!s_t0) {
         s_t0 = now_ms;
         s_next_blink = now_ms + rnd(1500, 4000);

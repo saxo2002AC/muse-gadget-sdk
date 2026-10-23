@@ -244,3 +244,10 @@ void muse_input_touch_talk(bool pressed)
 {
     (void)pressed;
 }
+
+/* muse_hang.h: no watchdog in the simulator. */
+#include "muse_hang.h"
+void muse_hang_kick(muse_hang_id_t id)
+{
+    (void)id;
+}

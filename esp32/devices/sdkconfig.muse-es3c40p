@@ -26,6 +26,20 @@ CONFIG_MUSE_BOARD_ES3C40P=y
 CONFIG_MUSE_JOLLY=y
 # Status words in Spanish.
 CONFIG_MUSE_UI_SPANISH=y
+# Silent freezes (no log, no heartbeat) become a reboot with backtraces:
+# our hang watchdog, the task watchdog with panic (idle tasks on both cores),
+# and the interrupt watchdog. sdkconfig.defaults turns the last two off for
+# PSRAM cache stalls, so the interrupt one gets 800 ms, not the default 300.
+CONFIG_MUSE_HANG_WATCHDOG=y
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=15
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+CONFIG_ESP_INT_WDT=y
+CONFIG_ESP_INT_WDT_TIMEOUT_MS=800
+CONFIG_ESP_INT_WDT_CHECK_CPU1=y
 # Its home router's DNS drops queries: public servers first, the router's last.
 CONFIG_MUSE_DNS_SERVERS="1.1.1.1,8.8.8.8"
 CONFIG_HOMEHUB_BUTTON_GPIO=0

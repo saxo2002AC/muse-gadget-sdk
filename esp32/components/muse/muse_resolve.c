@@ -174,25 +174,32 @@ static bool net_up(void)
     return esp_netif_get_nr_of_ifs() > 0;
 }
 
+/* On lwIP's thread: read the servers, put ours back if DHCP replaced them. */
+static void keep_on_tcpip(void *arg)
+{
+    (void)arg;
+    dns_call_t now = { 0 }, want = { 0 };
+    read_servers(&now.call);
+    xSemaphoreTake(s_dns_lock, portMAX_DELAY);
+    bool apply = muse_dns_step(&s_dns, now.v, want.v);
+    xSemaphoreGive(s_dns_lock);
+    if (apply) {
+        write_servers(&want.call);
+        char a[3 * 16 + 4];
+        muse_dns_format(want.v, want.v[2] ? 3 : want.v[1] ? 2 : 1, a, sizeof(a));
+        ESP_LOGI(TAG, "DNS servers: %s", a);
+    }
+}
+
+/* Never waits on lwIP: it's called from the esp_timer task and the event
+ * loop, which must not stall behind a busy lwIP thread. A full mailbox just
+ * skips this round; the next one comes 5 s later. */
 static void dns_keep(void)
 {
     if (!s_dns_lock || !net_up()) {
         return;
     }
-    dns_call_t now = { 0 };
-    if (tcpip_api_call(read_servers, &now.call) != ERR_OK) {
-        return;
-    }
-    dns_call_t want = { 0 };
-    xSemaphoreTake(s_dns_lock, portMAX_DELAY);
-    bool apply = muse_dns_step(&s_dns, now.v, want.v);
-    xSemaphoreGive(s_dns_lock);
-    if (apply) {
-        tcpip_api_call(write_servers, &want.call);
-        char a[3 * 16 + 4];
-        muse_dns_format(want.v, want.v[2] ? 3 : want.v[1] ? 2 : 1, a, sizeof(a));
-        ESP_LOGI(TAG, "DNS servers: %s", a);
-    }
+    tcpip_try_callback(keep_on_tcpip, NULL);
 }
 
 static void on_got_ip(void *arg, esp_event_base_t base, int32_t id, void *data)

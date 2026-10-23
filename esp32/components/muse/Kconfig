@@ -256,6 +256,16 @@ menu "Muse"
             health from a Guardián server on the local network, and its status
             screens. Landscape boards only (480x320): the ES3C40P turns it on.
 
+    config MUSE_HANG_WATCHDOG
+        bool "Reboot with backtraces when the UI or Link's heartbeat stops"
+        default n
+        help
+            A task that checks the UI's frame timer and Link's 5 s heartbeat
+            every second. One that stops (20 s, 90 s) gets every task's
+            backtrace printed and an abort, which reboots: a freeze that
+            logs nothing becomes a crash report (muse_hang.h). Pair it with
+            the task and interrupt watchdogs.
+
     config MUSE_DNS_SERVERS
         string "DNS servers ahead of the router's"
         depends on MUSE_HATCH
