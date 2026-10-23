@@ -37,7 +37,7 @@ static void fixtures(const char *dir)
     size_t n = fixture(dir, "ask.local.hora.json", b, sizeof(b));
     assert(jolly_fast_parse(b, n, &a));
     assert(a.local && !strcmp(a.intent, "hora") && !strcmp(a.text, "Son las tres y veinte de la tarde."));
-    assert(a.stt_ms == 512 && a.total_ms == 561 && !a.transcript[0]);
+    assert(a.stt_ms == 262 && a.total_ms == 270 && !a.transcript[0]);   /* Fernando's fixture */
     n = fixture(dir, "ask.local.estado.json", b, sizeof(b));
     assert(jolly_fast_parse(b, n, &a) && a.local && !strcmp(a.intent, "estado"));
     n = fixture(dir, "ask.forward.no_match.json", b, sizeof(b));

@@ -37,6 +37,7 @@
 #include "muse_wifi.h"
 #if CONFIG_MUSE_JOLLY
 #include "jolly/jolly_clock.h"
+#include "jolly/jolly_led.h"
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_imu.h"
 #endif
@@ -108,6 +109,7 @@ void muse_app_run(const muse_board_t *board)
 #if CONFIG_MUSE_JOLLY
     jolly_client_start();   /* the Mac Mini's Guardián, for Jolly's mood and screens */
     jolly_clock_start();    /* SNTP once Wi-Fi is up; the status bars' clock */
+    jolly_led_start();      /* the WS2812 on GPIO42 shows the mood (jolly_led.h) */
     jolly_imu_start(board->i2c_bus ? board->i2c_bus() : NULL);   /* an MPU-6050, if one is fitted */
 #endif
     /* Home Link owns the radios; these just hand it the saved settings. */

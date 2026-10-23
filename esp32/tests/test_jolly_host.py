@@ -29,6 +29,7 @@ CASES = {
     'speech_split': ['muse_speech_split.c'],
     'fast_auth': ['jolly/jolly_fast_auth.c'],
     'fast': ['jolly/jolly_fast_parse.c'],
+    'led': ['jolly/jolly_led_spec.c'],
 }
 JSON = Path(os.environ.get('CJSON_SOURCE_DIR', ROOT / 'managed_components/espressif__cjson/cJSON'))
 
@@ -115,6 +116,10 @@ class JollyHost(unittest.TestCase):
 
     def test_fast_auth(self):
         code, out = build_and_run('fast_auth', CASES['fast_auth'], args=[str(TESTS)])
+        self.assertEqual(code, 0, out)
+
+    def test_led(self):
+        code, out = build_and_run('led', CASES['led'], extra=['-lm'])
         self.assertEqual(code, 0, out)
 
     def test_speech_split(self):

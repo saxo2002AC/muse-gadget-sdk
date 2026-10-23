@@ -38,6 +38,10 @@ dependencies:
     version: "^2.1.0"
     rules:
       - if: "$CONFIG{MUSE_BOARD_ID} == \"fnk0104b\""
+  espressif/led_strip:
+    version: "~3.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"es3c40p\""
   espressif/esp_lcd_st7796:
     version: "1.4.0"
     rules:

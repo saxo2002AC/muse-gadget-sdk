@@ -39,6 +39,7 @@ mockup (`warroom-guardian/docs/mockup-v3-horizontal.html`). It's built with
 >tts_url=http://Mac-mini-de-acserver.local:3024 / >tts_key=...
 >dns=hatch.metaaivm.com                            resolve a name: @dns {ip | error, ms, servers, ours, forgets}
 >time                                              @time {synced, sntp, utc, local, last_sync_s}
+>led=0..100 / >led_beat=0|1 / >led                status LED: brightness (25), all-fine heartbeat (off)
 >dns_servers=1.1.1.1,8.8.8.8                       DNS ahead of the router's (empty: the router's only); NVS
 >whyreset                                          the last 4 setup-wipe sources with uptime, kept across resets
 ```
@@ -269,6 +270,13 @@ only means Jolly speaks first and Muse's reply is never played.
 
 ## Decisions
 
+- **Status LED** (`jolly_led.c`, `jolly_led_spec.c`): the WS2812 on GPIO42
+  (RMT). Escuchando steady blue, pensando blue/purple breathing, hablando cyan
+  with the voice, cariño pink, an alarming crit a red blink, no link dim grey,
+  durmiendo and quiet hours off, a standing crit dim red, a warning a slow
+  amber blink, all fine off (or a dim green blip every 10 s with
+  `>led_beat=1`). Off while the screen sleeps unless a crit is alarming.
+  25 % by default; `>led=0` turns it off.
 - **Clock** (`jolly_clock.c`): SNTP from pool.ntp.org and
   time.cloudflare.com once Wi-Fi is up (through our DNS servers), re-synced
   every 6 h, in Orlando's time with daylight saving (`EST5EDT,M3.2.0,M11.1.0`).

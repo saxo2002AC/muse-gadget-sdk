@@ -45,6 +45,7 @@
 #include "jolly/jolly_client.h"
 #include "jolly/jolly_clock.h"
 #include "jolly/jolly_fast.h"
+#include "jolly/jolly_led.h"
 #include "jolly/jolly_imu.h"
 #endif
 #include "muse_settings.h"
@@ -733,6 +734,9 @@ static bool console_command(char *line, bool whole)
         return true;
     }
     if (whole && jolly_fast_console_command(line)) {    /* the atajo's config: serial only */
+        return true;
+    }
+    if (whole && jolly_led_console_command(line)) {     /* >led=0..100, >led_beat= */
         return true;
     }
 #endif
